@@ -1,0 +1,27 @@
+.env
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+env/
+venv/
+.venv/
+ENV/
+
+# Editor / IDE
+.vscode/
+.idea/
+
+# Python packaging
+pip-wheel-metadata/
+*.egg-info/
+
+# Local data/cache
+__pypackages__/
+.python-version
+
+# Runtime data outputs
+data/*.txt
+data/*.json
+data/scripts/
