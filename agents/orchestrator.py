@@ -11,13 +11,13 @@ PIPELINE_STATUS_FILE = os.path.join(DATA_DIR, "pipeline_status.json")
 def load_pipeline_status():
     """Carga o inicializa el estado del pipeline."""
     if os.path.exists(PIPELINE_STATUS_FILE):
-        with open(PIPELINE_STATUS_FILE, "r") as f:
+        with open(PIPELINE_STATUS_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     return {"fase": "inicio", "videos_completados": [], "videos_pendientes": []}
 
 
 def save_pipeline_status(status):
-    with open(PIPELINE_STATUS_FILE, "w") as f:
+    with open(PIPELINE_STATUS_FILE, "w", encoding="utf-8") as f:
         json.dump(status, f, indent=2, ensure_ascii=False)
 
 
@@ -27,7 +27,7 @@ def run_phase_1():
     from agents.niche_hunter import run_niche_hunter
     from agents.niche_validator import run_niche_validator
 
-    print("\n{'='*60}")
+    print(f"\n{'='*60}")
     print("🚀 FASE 1: DESCUBRIMIENTO DE NICHO")
     print(f"{'='*60}\n")
 
@@ -113,7 +113,7 @@ def run_phase_3():
     print(f"{'='*60}\n")
 
     # Cargar calendario
-    with open(CONTENT_CALENDAR_FILE, "r") as f:
+    with open(CONTENT_CALENDAR_FILE, "r", encoding="utf-8") as f:
         calendario = json.load(f)
 
     videos = calendario.get("calendario", [])
@@ -140,7 +140,7 @@ def run_phase_3():
         # Guardar resultado individual
         video_output_dir = os.path.join(DATA_DIR, "videos_output")
         os.makedirs(video_output_dir, exist_ok=True)
-        with open(os.path.join(video_output_dir, f"{video_id}.json"), "w") as f:
+        with open(os.path.join(video_output_dir, f"{video_id}.json"), "w", encoding="utf-8") as f:
             json.dump(resultado, f, indent=2, ensure_ascii=False)
 
         # Actualizar estado

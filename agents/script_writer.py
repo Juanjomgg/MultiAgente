@@ -115,7 +115,7 @@ Recuerda: canal FACELESS en INGLÉS. Incluye todas las indicaciones visuales [B-
 
     # Guardar
     output_file = os.path.join(SCRIPTS_DIR, f"{video_id}.json")
-    with open(output_file, "w") as f:
+    with open(output_file, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
 
     print(f"✅ [Script Writer] Guión guardado: {output_file} ({palabras} palabras)")
@@ -123,16 +123,24 @@ Recuerda: canal FACELESS en INGLÉS. Incluye todas las indicaciones visuales [B-
 
 
 if __name__ == "__main__":
-    # Test con datos de ejemplo
-    test_video = {
-        "titulo": "7 Money Habits That Keep You Poor",
-        "formato": "listicle",
-        "angulo": "Hábitos financieros comunes que parecen inofensivos pero destruyen tu riqueza",
-        "keywords_objetivo": ["money habits", "financial mistakes", "personal finance tips"],
-        "duracion_estimada_min": 1,
-        "hook_inicial": "You're losing money right now and you don't even know it.",
-        "descripcion_breve": "7 everyday money habits that seem harmless but are secretly keeping you broke."
-    }
+    import sys
     
-    resultado = run_script_writer(test_video, "video_test")
+    CONTENT_CALENDAR_FILE = os.path.join(DATA_DIR, "content_calendar.json")
+    
+    # Permitir elegir vídeo por argumento: python script_writer.py 3
+    video_num = int(sys.argv[1]) if len(sys.argv) > 1 else 1
+    
+    with open(CONTENT_CALENDAR_FILE, "r", encoding="utf-8") as f:
+        calendario = json.load(f)
+    
+    videos = calendario.get("calendario", [])
+    if video_num < 1 or video_num > len(videos):
+        print(f"❌ Vídeo {video_num} no existe. Rango: 1-{len(videos)}")
+        sys.exit(1)
+    
+    video_data = videos[video_num - 1]
+    video_id = f"video_{video_num:02d}"
+    
+    print(f"🎯 Ejecutando Script Writer para {video_id}: {video_data.get('titulo', '')}")
+    resultado = run_script_writer(video_data, video_id)
     print(json.dumps(resultado, indent=2, ensure_ascii=False))

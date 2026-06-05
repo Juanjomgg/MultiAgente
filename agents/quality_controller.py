@@ -161,39 +161,24 @@ Sé específico en los cambios requeridos."""
     print(f"\n   💾 Guardado: {output_file}")
     return result
 
+# CAMBIA TODO EL BLOQUE if __name__ POR:
 
 if __name__ == "__main__":
-    # Test con datos simulados
-    test_result = {
-        "video_id": "video_test",
-        "video_data": {
-            "titulo": "7 Money Habits That Keep You Poor",
-            "formato": "listicle"
-        },
-        "results": {
-            "script": {
-                "hook": {"texto": "You're losing money right now and you don't even know it."},
-                "secciones": [{"titulo_seccion": "Habit 1"}, {"titulo_seccion": "Habit 2"}],
-                "palabras_totales": 1500,
-                "guion_completo": "You're losing money right now..."
-            },
-            "seo": {
-                "titulo_recomendado": "7 Money Habits That Keep You Poor (Stop #3 Today)",
-                "titulos": [{"texto": "7 Money Habits That Keep You Poor"}],
-                "keyword_principal": "money habits",
-                "tags": ["money habits", "financial mistakes"],
-                "texto_thumbnail": "STOP THESE NOW"
-            },
-            "thumbnail": {
-                "concepto": {
-                    "descripcion": "Wallet with money flying away",
-                    "elementos_principales": ["wallet", "flying bills", "red X"],
-                    "esquema_colores": "red/black/white",
-                    "texto_overlay": "STOP THESE NOW"
-                },
-                "estilo": "bold graphic"
-            }
-        },
-        "errors": {}
-    }
-    run_quality_check(test_result)
+    import sys
+
+    VIDEO_OUTPUT_DIR = os.path.join(DATA_DIR, "videos_output")
+
+    video_num = int(sys.argv[1]) if len(sys.argv) > 1 else 1
+    video_id = f"video_{video_num:02d}"
+
+    video_file = os.path.join(VIDEO_OUTPUT_DIR, f"{video_id}.json")
+    if not os.path.exists(video_file):
+        print(f"❌ No existe {video_file}. Ejecuta primero el pipeline para {video_id}.")
+        sys.exit(1)
+
+    with open(video_file, "r", encoding="utf-8") as f:
+        video_result = json.load(f)
+
+    print(f"🎯 Ejecutando Quality Check para {video_id}")
+    resultado = run_quality_check(video_result)
+    print(json.dumps(resultado, indent=2, ensure_ascii=False))

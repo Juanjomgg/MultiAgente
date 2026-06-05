@@ -38,7 +38,7 @@ def call_llm(agent_name: str, system_prompt: str, user_prompt: str,
                 ABACUS_BASE_URL, 
                 headers=headers, 
                 json=payload, 
-                timeout=120
+                timeout=300
             )
             response.raise_for_status()
             data = response.json()
@@ -59,6 +59,24 @@ def call_llm(agent_name: str, system_prompt: str, user_prompt: str,
                     f"❌ [{agent_name}] Falló tras {retries} intentos: {e}"
                 )
 
+def _repair_json(text: str) -> dict | None:
+    """Intenta reparar JSON truncado cerrando brackets/braces abiertos."""
+    # Contar brackets abiertos
+    open_braces = text.count('{') - text.count('}')
+    open_brackets = text.count('[') - text.count(']')
+    
+    # Si hay un string sin cerrar, cerrarlo
+    if text.rstrip().endswith('"') is False and text.count('"') % 2 != 0:
+        text += '"'
+    
+    # Cerrar brackets y braces pendientes
+    text += ']' * open_brackets
+    text += '}' * open_braces
+    
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return None
 
 def call_llm_json(agent_name: str, system_prompt: str, user_prompt: str,
                   temperature: float = 0.5, retries: int = 2) -> dict:
@@ -82,6 +100,11 @@ def call_llm_json(agent_name: str, system_prompt: str, user_prompt: str,
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError as e:
+        # Intentar reparar JSON truncado
+        print(f"⚠️ [{agent_name}] JSON truncado, intentando reparar...")
+        repaired = _repair_json(cleaned)
+        if repaired:
+            return repaired
         raise ValueError(
             f"❌ [{agent_name}] No devolvió JSON válido: {e}\nRespuesta raw:\n{raw[:500]}"
         )

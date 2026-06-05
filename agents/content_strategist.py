@@ -10,7 +10,7 @@ CONTENT_CALENDAR_FILE = os.path.join(DATA_DIR, "content_calendar.json")
 
 def load_winning_niche():
     """Carga el nicho ganador del Niche Validator."""
-    with open(VALIDATED_NICHES_FILE, "r") as f:
+    with open(VALIDATED_NICHES_FILE, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     ganador_nombre = data.get("nicho_ganador")
@@ -122,7 +122,7 @@ Genera el calendario completo con los 30 vídeos."""
         print("⚠️ [Content Strategist] No incluyó estrategia de canal.")
 
     # Guardar resultados
-    with open(CONTENT_CALENDAR_FILE, "w") as f:
+    with open(CONTENT_CALENDAR_FILE, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
 
     print(f"✅ [Content Strategist] Calendario generado: {len(calendario)} vídeos.")

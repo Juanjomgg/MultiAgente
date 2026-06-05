@@ -10,7 +10,7 @@ NICHE_RESULTS_FILE = os.path.join(DATA_DIR, "niche_analysis.json")
 
 def load_channels():
     """Carga los canales qualifying y genera un resumen agrupado por categoría."""
-    with open(QUALIFYING_CHANNELS_FILE, "r") as f:
+    with open(QUALIFYING_CHANNELS_FILE, "r", encoding="utf-8") as f:
         channels = json.load(f)
 
     if not channels:
@@ -118,7 +118,7 @@ Basándote en estos datos reales, propón los mejores nichos ordenados por puntu
     result["nichos"] = nichos_validos
 
     # Guardar resultados
-    with open(NICHE_RESULTS_FILE, "w") as f:
+    with open(NICHE_RESULTS_FILE, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
 
     print(f"✅ [Niche Hunter] {len(nichos_validos)} nichos identificados. Guardado en {NICHE_RESULTS_FILE}")

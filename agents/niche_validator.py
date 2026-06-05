@@ -12,7 +12,7 @@ VALIDATED_NICHES_FILE = os.path.join(DATA_DIR, "validated_niches.json")
 
 def load_niches():
     """Carga los nichos propuestos por el Niche Hunter."""
-    with open(NICHE_ANALYSIS_FILE, "r") as f:
+    with open(NICHE_ANALYSIS_FILE, "r", encoding="utf-8") as f:
         data = json.load(f)
     nichos = data.get("nichos", [])
     if not nichos:
@@ -130,7 +130,7 @@ Analiza críticamente cada uno y dame tu veredicto final con el nicho ganador.""
     ganador = result.get("nicho_ganador", "No definido")
 
     # Guardar resultados
-    with open(VALIDATED_NICHES_FILE, "w") as f:
+    with open(VALIDATED_NICHES_FILE, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
 
     print(f"✅ [Niche Validator] Validación completa. Guardado en {VALIDATED_NICHES_FILE}")

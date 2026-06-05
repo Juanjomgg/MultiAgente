@@ -46,8 +46,11 @@ Responde en JSON con esta estructura:
 }"""
 
 
+# CAMBIA la parte que genera la imagen con Ideogram.
+# En vez de usar /v1/images/generations, usa /v1/chat/completions con modalities
+
 def generate_thumbnail_image(prompt: str, video_id: str) -> str:
-    """Genera la imagen del thumbnail usando Ideogram 3.0 via Abacus API."""
+    """Genera la imagen del thumbnail usando Ideogram via Abacus API."""
     headers = {
         "Authorization": f"Bearer {ABACUS_API_KEY}",
         "Content-Type": "application/json",
@@ -55,24 +58,48 @@ def generate_thumbnail_image(prompt: str, video_id: str) -> str:
 
     payload = {
         "model": "ideogram",
-        "prompt": prompt,
-        "n": 1,
-        "size": "1792x1024",  # ratio 16:9 para YouTube
+        "messages": [
+            {"role": "user", "content": prompt}
+        ],
+        "modalities": ["image"],
+        "image_config": {
+            "num_images": 1,
+            "aspect_ratio": "16:9"
+        }
     }
 
     try:
         response = requests.post(
-            "https://routellm.abacus.ai/v1/images/generations",
+            "https://routellm.abacus.ai/v1/chat/completions",
             headers=headers,
             json=payload,
-            timeout=120
+            timeout=180
         )
         response.raise_for_status()
         data = response.json()
 
-        image_url = data["data"][0].get("url") or data["data"][0].get("b64_json")
+        # Extraer URL de la imagen del response
+        message = data["choices"][0]["message"]
+        content = message.get("content", "")
+        images = message.get("images", [])
 
-        if image_url and image_url.startswith("http"):
+        image_url = None
+        if images:
+            # Formato con array de images
+            for img in images:
+                if isinstance(img, dict) and "image_url" in img:
+                    image_url = img["image_url"].get("url", "")
+                    break
+        elif isinstance(content, list):
+            # Formato con content como array
+            for item in content:
+                if isinstance(item, dict) and item.get("type") == "image_url":
+                    image_url = item["image_url"]["url"]
+                    break
+        elif isinstance(content, str) and content.startswith("http"):
+            image_url = content
+
+        if image_url:
             # Descargar imagen
             img_response = requests.get(image_url, timeout=60)
             img_path = os.path.join(THUMBNAILS_DIR, f"{video_id}_thumbnail.png")
@@ -81,13 +108,9 @@ def generate_thumbnail_image(prompt: str, video_id: str) -> str:
             print(f"   🖼️ Imagen guardada: {img_path}")
             return img_path
         else:
-            print("   ⚠️ Imagen generada en base64, guardando...")
-            import base64
-            img_path = os.path.join(THUMBNAILS_DIR, f"{video_id}_thumbnail.png")
-            with open(img_path, "wb") as f:
-                f.write(base64.b64decode(image_url))
-            print(f"   🖼️ Imagen guardada: {img_path}")
-            return img_path
+            print(f"   ⚠️ No se encontró URL de imagen en la respuesta")
+            print(f"   Debug response keys: {list(message.keys())}")
+            return None
 
     except Exception as e:
         print(f"   ❌ Error generando imagen: {e}")
@@ -104,7 +127,7 @@ def run_thumbnail_conceptor(video_data: dict, video_id: str) -> dict:
     seo_file = os.path.join(DATA_DIR, "seo", f"{video_id}.json")
     texto_seo = ""
     if os.path.exists(seo_file):
-        with open(seo_file, "r") as f:
+        with open(seo_file, "r", encoding="utf-8") as f:
             seo_data = json.load(f)
         texto_seo = seo_data.get("texto_thumbnail", "")
 
@@ -141,7 +164,7 @@ Genera un prompt de imagen MUY detallado y específico para Ideogram 3.0, optimi
 
     # Guardar concepto
     output_file = os.path.join(THUMBNAILS_DIR, f"{video_id}_concept.json")
-    with open(output_file, "w") as f:
+    with open(output_file, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
 
     print(f"✅ [Thumbnail] Concepto guardado: {output_file}")
@@ -149,13 +172,23 @@ Genera un prompt de imagen MUY detallado y específico para Ideogram 3.0, optimi
 
 
 if __name__ == "__main__":
-    test_video = {
-        "titulo": "7 Money Habits That Keep You Poor",
-        "formato": "listicle",
-        "keywords_objetivo": ["money habits", "financial mistakes", "personal finance tips"],
-        "duracion_estimada_min": 10,
-        "hook_inicial": "You're losing money right now and you don't even know it.",
-        "descripcion_breve": "7 everyday money habits that seem harmless but are secretly keeping you broke."
-    }
-    resultado = run_thumbnail_conceptor(test_video, "video_test")
+    import sys
+
+    CONTENT_CALENDAR_FILE = os.path.join(DATA_DIR, "content_calendar.json")
+
+    video_num = int(sys.argv[1]) if len(sys.argv) > 1 else 1
+
+    with open(CONTENT_CALENDAR_FILE, "r", encoding="utf-8") as f:
+        calendario = json.load(f)
+
+    videos = calendario.get("calendario", [])
+    if video_num < 1 or video_num > len(videos):
+        print(f"❌ Vídeo {video_num} no existe. Rango: 1-{len(videos)}")
+        sys.exit(1)
+
+    video_data = videos[video_num - 1]
+    video_id = f"video_{video_num:02d}"
+
+    print(f"🎯 Ejecutando Thumbnail Conceptor para {video_id}: {video_data.get('titulo', '')}")
+    resultado = run_thumbnail_conceptor(video_data, video_id)
     print(json.dumps(resultado, indent=2, ensure_ascii=False))

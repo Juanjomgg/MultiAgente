@@ -75,7 +75,7 @@ def run_seo_optimizer(video_data: dict, video_id: str) -> dict:
     script_file = os.path.join(DATA_DIR, "scripts", f"{video_id}.json")
     script_context = ""
     if os.path.exists(script_file):
-        with open(script_file, "r") as f:
+        with open(script_file, "r", encoding="utf-8") as f:
             script_data = json.load(f)
         script_context = f"\nRESUMEN DEL GUIÓN: {script_data.get('guion_completo', '')[:500]}..."
 
@@ -118,7 +118,7 @@ Genera la optimización SEO completa: 3 variantes de título, descripción con t
 
     # Guardar
     output_file = os.path.join(SEO_DIR, f"{video_id}.json")
-    with open(output_file, "w") as f:
+    with open(output_file, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
 
     print(f"✅ [SEO Optimizer] Guardado: {output_file}")
@@ -126,13 +126,23 @@ Genera la optimización SEO completa: 3 variantes de título, descripción con t
 
 
 if __name__ == "__main__":
-    test_video = {
-        "titulo": "7 Money Habits That Keep You Poor",
-        "formato": "listicle",
-        "keywords_objetivo": ["money habits", "financial mistakes", "personal finance tips"],
-        "duracion_estimada_min": 10,
-        "hook_inicial": "You're losing money right now and you don't even know it.",
-        "descripcion_breve": "7 everyday money habits that seem harmless but are secretly keeping you broke."
-    }
-    resultado = run_seo_optimizer(test_video, "video_test")
+    import sys
+
+    CONTENT_CALENDAR_FILE = os.path.join(DATA_DIR, "content_calendar.json")
+
+    video_num = int(sys.argv[1]) if len(sys.argv) > 1 else 1
+
+    with open(CONTENT_CALENDAR_FILE, "r", encoding="utf-8") as f:
+        calendario = json.load(f)
+
+    videos = calendario.get("calendario", [])
+    if video_num < 1 or video_num > len(videos):
+        print(f"❌ Vídeo {video_num} no existe. Rango: 1-{len(videos)}")
+        sys.exit(1)
+
+    video_data = videos[video_num - 1]
+    video_id = f"video_{video_num:02d}"
+
+    print(f"🎯 Ejecutando SEO Optimizer para {video_id}: {video_data.get('titulo', '')}")
+    resultado = run_seo_optimizer(video_data, video_id)
     print(json.dumps(resultado, indent=2, ensure_ascii=False))

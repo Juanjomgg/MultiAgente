@@ -25,3 +25,9 @@ __pypackages__/
 data/*.txt
 data/*.json
 data/scripts/
+
+# Ignore local config script
+config.py
+
+# Ignore entire data directory
+data/
