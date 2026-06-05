@@ -32,7 +32,7 @@ AGENT_MAX_TOKENS = {
     "niche_hunter":       8000,
     "niche_validator":    2500,
     "content_strategist": 16000,
-    "script_writer":      16000,
+    "script_writer":      32000,
     "seo_optimizer":      1500,
     "thumbnail_conceptor": 1000,
     "quality_controller": 3000,

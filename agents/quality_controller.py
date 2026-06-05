@@ -71,8 +71,11 @@ def run_quality_check(video_result: dict) -> dict:
     # Construir resumen para el QC
     guion_resumen = ""
     if script_data:
+        hook = script_data.get('hook', '')
+        if isinstance(hook, dict):
+            hook = hook.get('texto', 'N/A')
         guion_resumen = f"""
-HOOK: {script_data.get('hook', {}).get('texto', 'N/A')[:300]}
+HOOK: {str(hook)[:300]}
 SECCIONES: {len(script_data.get('secciones', []))}
 PALABRAS TOTALES: {script_data.get('palabras_totales', 'N/A')}
 GUIÓN (primeros 500 chars): {script_data.get('guion_completo', '')[:500]}..."""
@@ -137,8 +140,7 @@ Sé específico en los cambios requeridos."""
     print(f"   📊 QUALITY CHECK — {video_id}")
     print(f"   {'─'*35}")
     for k, v in puntuaciones.items():
-        barra = "█" * v + "░" * (10 - v)
-        print(f"   {k:12s} [{barra}] {v}/10")
+        v = int(v) if isinstance(v, (str, float)) else v
     print(f"   {'─'*35}")
     print(f"   📈 Media: {result.get('media', 'N/A')}")
 

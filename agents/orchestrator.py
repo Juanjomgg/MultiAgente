@@ -68,7 +68,7 @@ def run_phase_2():
 
 
 def process_single_video(video_data, video_index):
-    """Procesa un vídeo: script + SEO + thumbnail en PARALELO."""
+    """Procesa un vídeo: script + SEO + thumbnail en PARALELO, saltando los que ya existen."""
     from agents.script_writer import run_script_writer
     from agents.seo_optimizer import run_seo_optimizer
     from agents.thumbnail_conceptor import run_thumbnail_conceptor
@@ -79,21 +79,52 @@ def process_single_video(video_data, video_index):
     results = {}
     errors = {}
 
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        futures = {
-            executor.submit(run_script_writer, video_data, video_id): "script",
-            executor.submit(run_seo_optimizer, video_data, video_id): "seo",
-            executor.submit(run_thumbnail_conceptor, video_data, video_id): "thumbnail",
-        }
+    # Comprobar qué outputs ya existen
+    script_file = os.path.join(DATA_DIR, "scripts", f"{video_id}.json")
+    seo_file = os.path.join(DATA_DIR, "seo", f"{video_id}.json")
+    thumb_file = os.path.join(DATA_DIR, "thumbnails", f"{video_id}_concept.json")
 
-        for future in as_completed(futures):
-            agent_name = futures[future]
-            try:
-                results[agent_name] = future.result()
-                print(f"   ✅ {agent_name} completado para {video_id}")
-            except Exception as e:
-                errors[agent_name] = str(e)
-                print(f"   ❌ {agent_name} falló para {video_id}: {e}")
+    tasks = {}
+
+    if os.path.exists(script_file):
+        print(f"   ⏭️ Script ya existe, saltando...")
+        with open(script_file, "r", encoding="utf-8") as f:
+            results["script"] = json.load(f)
+    else:
+        tasks["script"] = (run_script_writer, video_data, video_id)
+
+    if os.path.exists(seo_file):
+        print(f"   ⏭️ SEO ya existe, saltando...")
+        with open(seo_file, "r", encoding="utf-8") as f:
+            results["seo"] = json.load(f)
+    else:
+        tasks["seo"] = (run_seo_optimizer, video_data, video_id)
+
+    if os.path.exists(thumb_file):
+        print(f"   ⏭️ Thumbnail ya existe, saltando...")
+        with open(thumb_file, "r", encoding="utf-8") as f:
+            results["thumbnail"] = json.load(f)
+    else:
+        tasks["thumbnail"] = (run_thumbnail_conceptor, video_data, video_id)
+
+    # Ejecutar solo los que faltan en paralelo
+    if tasks:
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {
+                executor.submit(func, vdata, vid): name
+                for name, (func, vdata, vid) in tasks.items()
+            }
+
+            for future in as_completed(futures):
+                agent_name = futures[future]
+                try:
+                    results[agent_name] = future.result()
+                    print(f"   ✅ {agent_name} completado para {video_id}")
+                except Exception as e:
+                    errors[agent_name] = str(e)
+                    print(f"   ❌ {agent_name} falló para {video_id}: {e}")
+    else:
+        print(f"   ✅ Todos los outputs ya existían para {video_id}")
 
     return {
         "video_id": video_id,
@@ -143,10 +174,14 @@ def run_phase_3():
         with open(os.path.join(video_output_dir, f"{video_id}.json"), "w", encoding="utf-8") as f:
             json.dump(resultado, f, indent=2, ensure_ascii=False)
 
-        # Actualizar estado
-        completados.add(video_id)
-        status["videos_completados"] = list(completados)
-        save_pipeline_status(status)
+# Actualizar estado SOLO si no hubo errores críticos
+        if resultado["status"] == "completado":
+            completados.add(video_id)
+            status["videos_completados"] = list(completados)
+            save_pipeline_status(status)
+        else:
+            print(f"   ⚠️ {video_id} tiene errores, NO se marca como completado")
+            print(f"   Errores: {resultado['errors']}")
 
         # === CHECKPOINT HUMANO ===
         print(f"\n{'─'*40}")

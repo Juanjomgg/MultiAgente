@@ -51,6 +51,8 @@ Responde en JSON con esta estructura:
 
 def generate_thumbnail_image(prompt: str, video_id: str) -> str:
     """Genera la imagen del thumbnail usando Ideogram via Abacus API."""
+    import base64
+    
     headers = {
         "Authorization": f"Bearer {ABACUS_API_KEY}",
         "Content-Type": "application/json",
@@ -64,7 +66,7 @@ def generate_thumbnail_image(prompt: str, video_id: str) -> str:
         "modalities": ["image"],
         "image_config": {
             "num_images": 1,
-            "aspect_ratio": "16:9"
+            "aspect_ratio": "16x9"  # YouTube thumbnail ratio
         }
     }
 
@@ -78,39 +80,45 @@ def generate_thumbnail_image(prompt: str, video_id: str) -> str:
         response.raise_for_status()
         data = response.json()
 
-        # Extraer URL de la imagen del response
         message = data["choices"][0]["message"]
-        content = message.get("content", "")
         images = message.get("images", [])
 
-        image_url = None
         if images:
-            # Formato con array de images
-            for img in images:
-                if isinstance(img, dict) and "image_url" in img:
-                    image_url = img["image_url"].get("url", "")
-                    break
-        elif isinstance(content, list):
-            # Formato con content como array
-            for item in content:
-                if isinstance(item, dict) and item.get("type") == "image_url":
-                    image_url = item["image_url"]["url"]
-                    break
-        elif isinstance(content, str) and content.startswith("http"):
-            image_url = content
+            img_data = images[0]
+            img_url = None
+            img_b64 = None
 
-        if image_url:
-            # Descargar imagen
-            img_response = requests.get(image_url, timeout=60)
+            if isinstance(img_data, dict):
+                url_info = img_data.get("image_url", {})
+                url_str = url_info.get("url", "")
+                if url_str.startswith("data:image"):
+                    # Base64 inline
+                    img_b64 = url_str.split(",", 1)[1]
+                elif url_str.startswith("http"):
+                    img_url = url_str
+            elif isinstance(img_data, str):
+                if img_data.startswith("http"):
+                    img_url = img_data
+                else:
+                    img_b64 = img_data
+
             img_path = os.path.join(THUMBNAILS_DIR, f"{video_id}_thumbnail.png")
-            with open(img_path, "wb") as f:
-                f.write(img_response.content)
-            print(f"   🖼️ Imagen guardada: {img_path}")
-            return img_path
-        else:
-            print(f"   ⚠️ No se encontró URL de imagen en la respuesta")
-            print(f"   Debug response keys: {list(message.keys())}")
-            return None
+
+            if img_b64:
+                with open(img_path, "wb") as f:
+                    f.write(base64.b64decode(img_b64))
+                print(f"   🖼️ Imagen guardada (base64): {img_path}")
+                return img_path
+            elif img_url:
+                img_response = requests.get(img_url, timeout=60)
+                with open(img_path, "wb") as f:
+                    f.write(img_response.content)
+                print(f"   🖼️ Imagen guardada (url): {img_path}")
+                return img_path
+
+        print(f"   ⚠️ No se encontró imagen en la respuesta")
+        print(f"   Debug: {json.dumps(message, indent=2)[:300]}")
+        return None
 
     except Exception as e:
         print(f"   ❌ Error generando imagen: {e}")
