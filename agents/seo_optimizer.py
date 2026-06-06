@@ -64,8 +64,16 @@ Responde en JSON con esta estructura:
   "notas_seo": ["string (consejos adicionales para este vídeo)"]
 }"""
 
+def _build_feedback_context(feedback: list = None) -> str:
+    """Construye el contexto de feedback del QC."""
+    if not feedback:
+        return ""
+    ctx = "\n⚠️ FEEDBACK DEL QUALITY CONTROLLER — DEBES APLICAR ESTOS CAMBIOS:\n"
+    for fb in feedback:
+        ctx += f"\n• PROBLEMA: {fb['problema']}\n  SOLUCIÓN: {fb['solucion']}\n"
+    return ctx
 
-def run_seo_optimizer(video_data: dict, video_id: str) -> dict:
+def run_seo_optimizer(video_data: dict, video_id: str, feedback: list = None) -> dict:
     """Genera la optimización SEO completa para un vídeo."""
     os.makedirs(SEO_DIR, exist_ok=True)
 
@@ -90,7 +98,8 @@ DURACIÓN: {video_data.get('duracion_estimada_min', 10)} minutos
 VIDEO ID: {video_id}
 {script_context}
 
-Genera la optimización SEO completa: 3 variantes de título, descripción con timestamps, tags y texto para thumbnail."""
+Genera la optimización SEO completa: 3 variantes de título, descripción con timestamps, tags y texto para thumbnail.
+{_build_feedback_context(feedback)}"""
 
     result = call_llm_json(
         agent_name="seo_optimizer",

@@ -6,57 +6,137 @@ from llm_client import call_llm, call_llm_json
 DATA_DIR = "data"
 SCRIPTS_DIR = os.path.join(DATA_DIR, "scripts")
 
-SCRIPT_PROMPT = """Eres un guionista experto en YouTube con millones de views acumuladas. Escribes guiones para canales FACELESS en INGLÉS que maximizan retención y engagement.
+SCRIPT_PROMPT = """You are a world-class YouTube scriptwriter specializing in FACELESS channels that achieve 50%+ average view duration. Your scripts are engineered — not just written — using proven psychological retention mechanics.
 
-ESTRUCTURA OBLIGATORIA DEL GUIÓN:
+═══════════════════════════════════════════════
+CORE PRINCIPLES (memorize these)
+═══════════════════════════════════════════════
+
+1. OPEN LOOPS are your #1 tool. Plant 2-3 unresolved questions or promises in the first 90 seconds. Resolve them ONLY near the end. The viewer stays because their brain cannot tolerate unresolved tension.
+   BAD:  "Today we'll cover 7 money habits."
+   GOOD: "By the end of this video you'll understand why the habit at #4 is statistically the one keeping most people poor — and it's probably not what you think."
+
+2. THUMBNAIL-HOOK ALIGNMENT. The FIRST sentence must deliver exactly what the thumbnail promised. If the thumbnail says "STOP THESE NOW", the first words must address THOSE specific things. Mismatch = instant click-off.
+
+3. PATTERN INTERRUPTS every 90-120 seconds. The human brain disengages at a predictable rhythm. Every 90-120 seconds you MUST change the format: a surprising statistic, a rhetorical question directed at the viewer, a hypothetical scenario, a "but here's where it gets weird" pivot, a dramatic contrast. Mark these as [PATTERN INTERRUPT].
+
+4. THE 65% RESCUE. Most viewers drop at 60-70% of runtime. Plant a "SECOND HOOK" at the 55-60% mark: reveal something unexpected, tease the most surprising item is coming, or deliver a plot twist about something mentioned earlier. This is non-negotiable.
+
+5. TTS-OPTIMIZED WRITING. This will be narrated by AI text-to-speech. Rules:
+   - Maximum 15 words per sentence. Hard limit.
+   - Use "..." for a 1-second pause, "......" for a 2-second pause
+   - Write CAPS for a word that should be emphasized (e.g. "This is CRITICAL.")
+   - No tongue-twister consonant clusters
+   - No parenthetical asides — they sound robotic in TTS
+   - Spell out numbers under 13 (say "seven" not "7")
+   - Contractions are MANDATORY (say "don't", "you're", "it's" — not "do not", "you are")
+
+6. KEYWORD IN FIRST 30 SECONDS. The primary SEO keyword must appear naturally in spoken dialogue within the first 30 seconds. YouTube indexes transcriptions.
+
+7. CURIOSITY GAP MANAGEMENT. Never fully satisfy curiosity on any point until you're ready to move on. End every section with either an unresolved question or a bridge that makes the next section feel essential.
+
+═══════════════════════════════════════════════
+MANDATORY STRUCTURE
+═══════════════════════════════════════════════
 
 === HOOK (0:00 - 0:30) ===
-- Abre con pregunta impactante, dato sorprendente o afirmación provocadora
-- Genera curiosidad inmediata
-- Incluye un "pattern interrupt"
-- Promete el valor que obtendrá si se queda
+PURPOSE: Stop the scroll. Retain the viewer past 30 seconds (YouTube's first measurement point).
+REQUIREMENTS:
+- Sentence 1: Deliver on the thumbnail promise IMMEDIATELY
+- Sentence 2-3: Shocking stat, provocative claim, or counterintuitive scenario that creates pattern interrupt
+- Sentence 4-5: Plant the MAIN open loop ("By the end of this video you'll know X... and X will change Y")
+- Include the primary keyword naturally within these 30 seconds
+- NO "hey guys welcome back" — delete all filler openers
 
 === INTRO (0:30 - 1:00) ===
-- Contexto rápido, establece credibilidad
+PURPOSE: Establish credibility and raise stakes WITHOUT slowing pace.
+REQUIREMENTS:
+- Stakes amplifier: make the viewer feel this PERSONALLY applies to them right now
+- Plant a SECONDARY open loop (something interesting you'll reveal mid-video)
+- Keep it under 90 words — any longer and it feels like padding
 
-=== CUERPO (1:00 - fin-2:00) ===
-- Divide en secciones claras con transiciones
-- Cada 2-3 minutos incluye un "retention bump"
-- Usa storytelling, lenguaje conversacional
-- Frases cortas y directas
+=== SECTION 1 ===
+(Continue numbering for each body section)
+PURPOSE: Content delivery with engineered retention.
+REQUIREMENTS:
+- Start with a mini-hook that makes THIS section feel essential
+- [PATTERN INTERRUPT] marker at 90-120 second intervals throughout the body
+- Specific examples, data points, or micro-stories — not vague generalizations
+- End with a BRIDGE: "But here's where most people get this completely wrong..."
+  or "What I'm about to show you in the next section will change how you see this..."
 
-=== CTA + CIERRE (últimos 2 min) ===
-- Resumen del valor, call to action natural, teaser
+=== SECTION 2 ===
+... (repeat pattern)
 
-REGLAS:
-- Todo en INGLÉS
-- Tono conversacional, energético, claro
-- Incluye indicaciones: [B-ROLL: descripción], [TEXTO EN PANTALLA: texto], [TRANSICIÓN], [PAUSA]
-- Separa cada sección con === NOMBRE DE SECCIÓN ===
-- NO uses JSON. Escribe el guión como texto plano, listo para locutar."""
+=== THE 65% RESCUE ===
+PURPOSE: Re-engage viewers who are about to leave.
+REQUIREMENTS:
+- Signal something surprising is coming: "I saved the most counterintuitive one for here..."
+- Or reveal something that recontextualizes earlier information
+- Or deliver a mini-plot-twist: "Remember what I said at the beginning? Well..."
+- Must feel like a natural escalation, not a desperate grab
 
-METADATA_PROMPT = """Analiza el siguiente guión y devuelve SOLO este JSON (sin texto extra):
+=== CTA + CLOSING ===
+PURPOSE: Resolve all open loops. Convert to subscriber.
+REQUIREMENTS:
+- Resolve EVERY open loop planted earlier — viewers feel satisfied
+- Natural CTA (never beg): "If this was useful, the algorithm really does reward a like — it takes two seconds."
+- Tease the NEXT video with a new open loop: "In my next video I'll cover X — and X is something most people in [niche] never figure out."
+- Last sentence should be memorable — a punchy takeaway or challenge
+
+═══════════════════════════════════════════════
+PRODUCTION MARKERS (use throughout)
+═══════════════════════════════════════════════
+
+[B-ROLL: precise visual description]     ← what appears on screen
+[TEXT ON SCREEN: exact text to show]     ← lower thirds, callouts
+[TRANSITION]                             ← cut or fade between sections
+[PAUSE 1s] or [PAUSE 2s]                ← silence for dramatic effect
+[EMPHASIS: word or phrase]              ← direct TTS to stress this
+[PATTERN INTERRUPT]                     ← marks a deliberate engagement reset
+[OPEN LOOP: description]                ← marks where you plant a loop
+[CLOSE LOOP: description]               ← marks where you resolve it
+[65% RESCUE]                            ← marks the re-engagement moment
+[MUSIC CUE: mood]                       ← background music direction
+
+═══════════════════════════════════════════════
+WRITING RULES
+═══════════════════════════════════════════════
+
+VOICE: Conversational, direct, second-person ("you", "your"). Like a smart friend explaining something important.
+PACE: Fast. No padding. Every sentence earns its place.
+SPECIFICITY: Always specific over vague. "73% of Americans" beats "most people". "$2,400 per year" beats "a lot of money".
+EMOTION: Target frustration, curiosity, and aspiration — in that order.
+FORBIDDEN PHRASES: "In this video", "Today we're going to", "Hey guys", "Don't forget to subscribe", "So basically", "It's important to note that", "As you can see"
+
+Format the script with === SECTION NAME === headers separating each section.
+Write in PLAIN TEXT — no JSON, no markdown, no asterisks. Pure narration-ready script."""
+
+
+METADATA_PROMPT = """Analyze the following YouTube script and return ONLY this JSON (no extra text, no markdown):
 {
   "duracion_estimada_min": int,
   "palabras_totales": int,
-  "tecnica_hook": "string (qué técnica de hook se usó)",
-  "num_secciones": int,
-  "retention_bumps": ["string (lista de retention bumps usados)"],
-  "notas_produccion": ["string (3-5 notas clave para el editor)"]
+  "tecnica_hook": "string (which specific hook technique was used)",
+  "open_loops_planted": ["string (brief description of each open loop)"],
+  "pattern_interrupts_count": int,
+  "has_65_percent_rescue": true,
+  "retention_bumps": ["string (list of retention mechanics used)"],
+  "notas_produccion": ["string (3-5 key production notes for the editor)"]
 }"""
 
 
 def parse_script_sections(raw_script: str) -> dict:
-    """Parsea el guión en texto plano a secciones estructuradas."""
+    """Parses the plain-text script into structured sections."""
     sections = {"hook": "", "intro": "", "secciones": [], "cta_cierre": ""}
-    
+
     current_section = None
     current_text = []
     section_count = 0
-    
+
     for line in raw_script.split("\n"):
         line_upper = line.strip().upper()
-        
+
         if "HOOK" in line_upper and "===" in line:
             if current_section and current_text:
                 _save_section(sections, current_section, current_text, section_count)
@@ -67,7 +147,7 @@ def parse_script_sections(raw_script: str) -> dict:
                 _save_section(sections, current_section, current_text, section_count)
             current_section = "intro"
             current_text = []
-        elif ("CTA" in line_upper or "CIERRE" in line_upper or "CLOSING" in line_upper or "OUTRO" in line_upper) and "===" in line:
+        elif any(kw in line_upper for kw in ("CTA", "CLOSING", "CIERRE", "OUTRO")) and "===" in line:
             if current_section and current_text:
                 _save_section(sections, current_section, current_text, section_count)
             current_section = "cta_cierre"
@@ -81,16 +161,16 @@ def parse_script_sections(raw_script: str) -> dict:
         else:
             if current_section:
                 current_text.append(line)
-    
-    # Guardar última sección
+
+    # Save last section
     if current_section and current_text:
         _save_section(sections, current_section, current_text, section_count)
-    
+
     return sections
 
 
 def _save_section(sections, section_name, text_lines, count):
-    """Guarda una sección parseada."""
+    """Saves a parsed section."""
     text = "\n".join(text_lines).strip()
     if section_name == "hook":
         sections["hook"] = text
@@ -99,7 +179,7 @@ def _save_section(sections, section_name, text_lines, count):
     elif section_name == "cta_cierre":
         sections["cta_cierre"] = text
     elif section_name.startswith("seccion_"):
-        title = text_lines[0].strip() if text_lines else f"Sección {count}"
+        title = text_lines[0].strip() if text_lines else f"Section {count}"
         body = "\n".join(text_lines[1:]).strip() if len(text_lines) > 1 else text
         sections["secciones"].append({
             "numero": count,
@@ -109,28 +189,35 @@ def _save_section(sections, section_name, text_lines, count):
 
 
 def run_script_writer(video_data: dict, video_id: str) -> dict:
-    """Genera el guión completo para un vídeo en 2 fases."""
+    """Generates a complete YouTube script in 2 phases."""
     os.makedirs(SCRIPTS_DIR, exist_ok=True)
 
     titulo = video_data.get('titulo', 'Sin título')
     duracion = video_data.get('duracion_estimada_min', 10)
-    print(f"✍️ [Script Writer] Generando guión para {video_id}: {titulo}")
 
-    # === FASE 1: Guión en texto plano ===
-    user_prompt = f"""Escribe el guión completo para este vídeo de YouTube:
+    print(f"✍️ [Script Writer] Generating script for {video_id}: {titulo}")
 
-TÍTULO: {titulo}
-FORMATO: {video_data.get('formato', 'explicacion')}
-ÁNGULO: {video_data.get('angulo', '')}
-KEYWORDS OBJETIVO: {', '.join(video_data.get('keywords_objetivo', []))}
-DURACIÓN OBJETIVO: {duracion} minutos ({duracion * 150} palabras aprox.)
-HOOK SUGERIDO: {video_data.get('hook_inicial', '')}
-DESCRIPCIÓN: {video_data.get('descripcion_breve', '')}
+    # === PHASE 1: Plain-text script ===
+    user_prompt = f"""Write the complete YouTube script for this video:
 
-Escribe el guión COMPLETO, palabra por palabra, listo para ser narrado.
-Canal FACELESS en INGLÉS. Incluye [B-ROLL], [TEXTO EN PANTALLA], [PAUSA], [TRANSICIÓN]."""
+TITLE: {titulo}
+FORMAT: {video_data.get('formato', 'explicacion')}
+ANGLE: {video_data.get('angulo', '')}
+TARGET KEYWORDS: {', '.join(video_data.get('keywords_objetivo', []))}
+TARGET DURATION: {duracion} minutes (~{duracion * 150} words)
+HOOK SUGGESTION: {video_data.get('hook_inicial', '')}
+VIDEO DESCRIPTION: {video_data.get('descripcion_breve', '')}
 
-    print(f"   📝 Fase 1: Generando guión en texto plano...")
+REQUIREMENTS:
+- Primary keyword "{video_data.get('keywords_objetivo', [''])[0]}" must appear in the first 30 seconds
+- Plant at least 2 open loops in the first 90 seconds
+- Include [PATTERN INTERRUPT] every 90-120 seconds
+- Include [65% RESCUE] at approximately the {int(duracion * 0.6)}-minute mark
+- All production markers ([B-ROLL], [TEXT ON SCREEN], etc.) must be present throughout
+- TTS-optimized: max 15 words per sentence, contractions mandatory
+- Write the COMPLETE script word-for-word, ready for AI voiceover narration"""
+
+    print(f"   📝 Phase 1: Generating plain-text script...")
     raw_script = call_llm(
         agent_name="script_writer",
         system_prompt=SCRIPT_PROMPT,
@@ -138,28 +225,34 @@ Canal FACELESS en INGLÉS. Incluye [B-ROLL], [TEXTO EN PANTALLA], [PAUSA], [TRAN
         temperature=0.8
     )
 
-    # === FASE 2: Metadata en JSON (llamada ligera) ===
-    print(f"   📊 Fase 2: Extrayendo metadata...")
+    # === PHASE 2: Lightweight metadata JSON ===
+    print(f"   📊 Phase 2: Extracting metadata...")
     try:
         metadata = call_llm_json(
-            agent_name="seo_optimizer",  # modelo más barato para metadata
+            agent_name="seo_optimizer",  # cheaper model for metadata
             system_prompt=METADATA_PROMPT,
-            user_prompt=f"Guión a analizar:\n\n{raw_script[:3000]}",  # solo inicio para ahorrar tokens
+            user_prompt=f"Script to analyze:\n\n{raw_script[:3000]}",
             temperature=0.3
         )
     except Exception as e:
-        print(f"   ⚠️ Metadata falló, usando valores por defecto: {e}")
+        print(f"   ⚠️ Metadata failed, using defaults: {e}")
         metadata = {
             "duracion_estimada_min": duracion,
-            "tecnica_hook": "desconocida",
-            "num_secciones": 0,
+            "tecnica_hook": "unknown",
+            "open_loops_planted": [],
+            "pattern_interrupts_count": 0,
+            "has_65_percent_rescue": False,
             "retention_bumps": [],
             "notas_produccion": []
         }
 
-    # === Estructurar resultado ===
+    # === Structure result ===
     sections = parse_script_sections(raw_script)
     palabras = len(raw_script.split())
+    min_palabras = duracion * 100
+
+    if palabras < min_palabras:
+        print(f"   ⚠️ Script short: {palabras} words (minimum: {min_palabras})")
 
     result = {
         "video_id": video_id,
@@ -167,6 +260,9 @@ Canal FACELESS en INGLÉS. Incluye [B-ROLL], [TEXTO EN PANTALLA], [PAUSA], [TRAN
         "duracion_estimada_min": metadata.get("duracion_estimada_min", duracion),
         "palabras_totales": palabras,
         "tecnica_hook": metadata.get("tecnica_hook", ""),
+        "open_loops_planted": metadata.get("open_loops_planted", []),
+        "pattern_interrupts_count": metadata.get("pattern_interrupts_count", 0),
+        "has_65_percent_rescue": metadata.get("has_65_percent_rescue", False),
         "hook": sections.get("hook", ""),
         "intro": sections.get("intro", ""),
         "secciones": sections.get("secciones", []),
@@ -176,33 +272,34 @@ Canal FACELESS en INGLÉS. Incluye [B-ROLL], [TEXTO EN PANTALLA], [PAUSA], [TRAN
         "notas_produccion": metadata.get("notas_produccion", [])
     }
 
-    min_palabras = duracion * 100
-    if palabras < min_palabras:
-        print(f"   ⚠️ Guión corto: {palabras} palabras (mínimo: {min_palabras})")
-
-    # Guardar
+    # Save
     output_file = os.path.join(SCRIPTS_DIR, f"{video_id}.json")
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
 
-    print(f"   ✅ [Script Writer] Guión guardado: {output_file} ({palabras} palabras)")
+    print(f"   ✅ [Script Writer] Saved: {output_file} ({palabras} words)")
+    print(f"   🔁 Open loops: {len(result['open_loops_planted'])} | Pattern interrupts: {result['pattern_interrupts_count']} | 65% rescue: {result['has_65_percent_rescue']}")
     return result
 
 
 if __name__ == "__main__":
     import sys
-    
+
+    # BUG FIX: define CONTENT_CALENDAR_FILE BEFORE using it
+    CONTENT_CALENDAR_FILE = os.path.join(DATA_DIR, "content_calendar.json")
+
     video_num = int(sys.argv[1]) if len(sys.argv) > 1 else 1
-    
+
     with open(CONTENT_CALENDAR_FILE, "r", encoding="utf-8") as f:
         calendario = json.load(f)
-    
-    CONTENT_CALENDAR_FILE = os.path.join(DATA_DIR, "content_calendar.json")
+
     videos = calendario.get("calendario", [])
     if video_num < 1 or video_num > len(videos):
-        print(f"❌ Vídeo {video_num} no existe. Rango: 1-{len(videos)}")
+        print(f"❌ Video {video_num} doesn't exist. Range: 1-{len(videos)}")
         sys.exit(1)
-    
+
     video_data = videos[video_num - 1]
     video_id = f"video_{video_num:02d}"
+
+    print(f"🎯 Running Script Writer for {video_id}: {video_data.get('titulo', '')}")
     resultado = run_script_writer(video_data, video_id)

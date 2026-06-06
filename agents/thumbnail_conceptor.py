@@ -124,8 +124,16 @@ def generate_thumbnail_image(prompt: str, video_id: str) -> str:
         print(f"   ❌ Error generando imagen: {e}")
         return None
 
+def _build_feedback_context(feedback: list = None) -> str:
+    """Construye el contexto de feedback del QC."""
+    if not feedback:
+        return ""
+    ctx = "\n⚠️ FEEDBACK DEL QUALITY CONTROLLER — DEBES APLICAR ESTOS CAMBIOS:\n"
+    for fb in feedback:
+        ctx += f"\n• PROBLEMA: {fb['problema']}\n  SOLUCIÓN: {fb['solucion']}\n"
+    return ctx
 
-def run_thumbnail_conceptor(video_data: dict, video_id: str) -> dict:
+def run_thumbnail_conceptor(video_data: dict, video_id: str, feedback: list = None) -> dict:
     """Genera concepto + imagen del thumbnail."""
     os.makedirs(THUMBNAILS_DIR, exist_ok=True)
 
@@ -149,7 +157,8 @@ TEXTO SUGERIDO POR SEO: {texto_seo if texto_seo else 'No disponible'}
 VIDEO ID: {video_id}
 
 Recuerda: canal FACELESS, NO caras humanas. El thumbnail debe ser impactante en móvil.
-Genera un prompt de imagen MUY detallado y específico para Ideogram 3.0, optimizado para texto legible en la imagen."""
+Genera un prompt de imagen MUY detallado y específico para Ideogram 3.0, optimizado para texto legible en la imagen.
+{_build_feedback_context(feedback)}"""
 
     result = call_llm_json(
         agent_name="thumbnail_conceptor",
