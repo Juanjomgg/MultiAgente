@@ -197,15 +197,30 @@ def run_script_writer(video_data: dict, video_id: str) -> dict:
 
     print(f"✍️ [Script Writer] Generating script for {video_id}: {titulo}")
 
+    # Normalize keywords — handle both dict and list formats
+    kw = video_data.get('keywords_objetivo', {})
+    if isinstance(kw, dict):
+        primary_kw = kw.get('principal', '')
+        secondary_kws = ', '.join(kw.get('secundarias', []))
+    else:
+        primary_kw = kw[0] if kw else ''
+        secondary_kws = ', '.join(kw[1:]) if len(kw) > 1 else ''
+
+    hook_tecnica = video_data.get('hook_tecnica', '')
+    thumbnail_concepto = video_data.get('thumbnail_concepto', '')
+
     # === PHASE 1: Plain-text script ===
     user_prompt = f"""Write the complete YouTube script for this video:
 
 TITLE: {titulo}
 FORMAT: {video_data.get('formato', 'explicacion')}
 ANGLE: {video_data.get('angulo', '')}
-TARGET KEYWORDS: {', '.join(video_data.get('keywords_objetivo', []))}
-TARGET DURATION: {duracion} minutes (~{duracion * 150} words)
+PRIMARY KEYWORD: {primary_kw}
+SECONDARY KEYWORDS: {secondary_kws}
+HOOK TECHNIQUE TO USE: {hook_tecnica} — apply this specific technique for the hook
 HOOK SUGGESTION: {video_data.get('hook_inicial', '')}
+THUMBNAIL CONCEPT (align hook with this visual): {thumbnail_concepto}
+TARGET DURATION: {duracion} minutes (~{duracion * 150} words)
 VIDEO DESCRIPTION: {video_data.get('descripcion_breve', '')}
 
 REQUIREMENTS:

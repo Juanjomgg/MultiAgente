@@ -67,73 +67,66 @@ def run_phase_2():
     return calendario
 
 
-def process_single_video(video_data, video_index, improvement_round=0):
-    """Procesa un vídeo: script + SEO + thumbnail en PARALELO, con loop de mejora."""
+def process_single_video(video_data, video_index):
+    """Procesa un vídeo: script → [seo + thumbnail en paralelo] → quality_controller."""
     from agents.script_writer import run_script_writer
     from agents.seo_optimizer import run_seo_optimizer
     from agents.thumbnail_conceptor import run_thumbnail_conceptor
 
     video_id = f"video_{video_index:02d}"
-    
-    if improvement_round == 0:
-        print(f"\n🎬 Procesando {video_id}: {video_data['titulo']}")
-    else:
-        print(f"\n🔄 MEJORA RONDA {improvement_round} para {video_id}")
+    print(f"\n🎬 Procesando {video_id}: {video_data['titulo']}")
 
     results = {}
     errors = {}
 
-    # Comprobar qué outputs ya existen (solo en ronda 0)
     script_file = os.path.join(DATA_DIR, "scripts", f"{video_id}.json")
-    seo_file = os.path.join(DATA_DIR, "seo", f"{video_id}.json")
-    thumb_file = os.path.join(DATA_DIR, "thumbnails", f"{video_id}_concept.json")
+    seo_file    = os.path.join(DATA_DIR, "seo", f"{video_id}.json")
+    thumb_file  = os.path.join(DATA_DIR, "thumbnails", f"{video_id}_concept.json")
 
+    # ── STEP 1: Script (must finish before SEO/Thumbnail) ──────────────────
+    if os.path.exists(script_file):
+        print(f"   ⏭️ Script already exists, skipping...")
+        with open(script_file, "r", encoding="utf-8") as f:
+            results["script"] = json.load(f)
+    else:
+        try:
+            results["script"] = run_script_writer(video_data, video_id)
+            print(f"   ✅ script done")
+        except Exception as e:
+            errors["script"] = str(e)
+            print(f"   ❌ script failed: {e}")
+
+    # ── STEP 2: SEO + Thumbnail in parallel (both benefit from script) ──────
     tasks = {}
 
-    if improvement_round == 0:
-        # Primera ronda: saltar los que ya existen
-        if os.path.exists(script_file):
-            print(f"   ⏭️ Script ya existe, saltando...")
-            with open(script_file, "r", encoding="utf-8") as f:
-                results["script"] = json.load(f)
-        else:
-            tasks["script"] = {"func": run_script_writer, "args": (video_data, video_id)}
-
-        if os.path.exists(seo_file):
-            print(f"   ⏭️ SEO ya existe, saltando...")
-            with open(seo_file, "r", encoding="utf-8") as f:
-                results["seo"] = json.load(f)
-        else:
-            tasks["seo"] = {"func": run_seo_optimizer, "args": (video_data, video_id)}
-
-        if os.path.exists(thumb_file):
-            print(f"   ⏭️ Thumbnail ya existe, saltando...")
-            with open(thumb_file, "r", encoding="utf-8") as f:
-                results["thumbnail"] = json.load(f)
-        else:
-            tasks["thumbnail"] = {"func": run_thumbnail_conceptor, "args": (video_data, video_id)}
+    if os.path.exists(seo_file):
+        print(f"   ⏭️ SEO already exists, skipping...")
+        with open(seo_file, "r", encoding="utf-8") as f:
+            results["seo"] = json.load(f)
     else:
-        # Rondas de mejora: tasks ya vienen preparadas desde run_phase_3
-        return None  # Se maneja desde run_phase_3
+        tasks["seo"] = (run_seo_optimizer, video_data, video_id)
 
-    # Ejecutar solo los que faltan en paralelo
+    if os.path.exists(thumb_file):
+        print(f"   ⏭️ Thumbnail already exists, skipping...")
+        with open(thumb_file, "r", encoding="utf-8") as f:
+            results["thumbnail"] = json.load(f)
+    else:
+        tasks["thumbnail"] = (run_thumbnail_conceptor, video_data, video_id)
+
     if tasks:
-        with ThreadPoolExecutor(max_workers=3) as executor:
+        with ThreadPoolExecutor(max_workers=2) as executor:
             futures = {
-                executor.submit(t["func"], *t["args"]): name
-                for name, t in tasks.items()
+                executor.submit(func, vdata, vid): name
+                for name, (func, vdata, vid) in tasks.items()
             }
-
             for future in as_completed(futures):
                 agent_name = futures[future]
                 try:
                     results[agent_name] = future.result()
-                    print(f"   ✅ {agent_name} completado para {video_id}")
+                    print(f"   ✅ {agent_name} done")
                 except Exception as e:
                     errors[agent_name] = str(e)
-                    print(f"   ❌ {agent_name} falló para {video_id}: {e}")
-    else:
-        print(f"   ✅ Todos los outputs ya existían para {video_id}")
+                    print(f"   ❌ {agent_name} failed: {e}")
 
     return {
         "video_id": video_id,

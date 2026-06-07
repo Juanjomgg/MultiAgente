@@ -7,99 +7,139 @@ DATA_DIR = "data"
 SEO_DIR = os.path.join(DATA_DIR, "seo")
 
 
-SYSTEM_PROMPT = """Eres un experto en YouTube SEO con años de experiencia posicionando vídeos en el top de búsquedas.
+SYSTEM_PROMPT = """You are a YouTube SEO expert who has ranked hundreds of videos on the first page. You understand that SEO is not keyword stuffing — it's matching search intent with precision.
 
-Tu trabajo es optimizar cada vídeo para MÁXIMA visibilidad orgánica en YouTube.
+═══════════════════════════════════════════════
+TITLE RULES (max 60 chars)
+═══════════════════════════════════════════════
+- Primary keyword in the FIRST 3 words when possible
+- For listicles: lead with the number ("7 Money Habits...")
+- For informational: lead with the keyword, add curiosity ("Personal Finance Mistakes Most People Make")
+- For commercial: lead with keyword, add qualifier ("Best Budget Apps: Ranked by a Finance Nerd")
+- NO clickbait that the video doesn't deliver on
+- Generate 3 variants with different angles — not just different word order
+- Each variant should feel like a genuinely different creative choice
 
-REGLAS SEO PARA YOUTUBE:
-1. **Título** (máx 60 caracteres):
-   - Keyword principal al inicio
-   - Número si es listicle
-   - Genera curiosidad o promete beneficio
-   - NO clickbait engañoso — debe cumplir lo que promete
-   - Genera 3 variantes para elegir
+═══════════════════════════════════════════════
+DESCRIPTION RULES (max 5000 chars)
+═══════════════════════════════════════════════
+ABOVE THE FOLD (first 2 lines — most important):
+- Line 1: Primary keyword + compelling one-sentence summary (this is what appears in search previews)
+- Line 2: Secondary keyword + specific value promise ("In this video you'll learn exactly how to...")
+- These 2 lines determine whether someone clicks through from search
 
-2. **Descripción** (máx 5000 caracteres):
-   - Primera línea: resumen potente con keyword (aparece en preview)
-   - Primeras 2-3 líneas son las más importantes (above the fold)
-   - Incluye timestamps/capítulos
-   - Keywords naturales repartidas (NO keyword stuffing)
-   - CTA a suscripción
-   - Links a vídeos relacionados (placeholder)
-   - 2-3 hashtags relevantes al final
+BODY:
+- Timestamps/chapters (essential for watch time and search features)
+- 3-4 natural keyword mentions — not stuffed, read naturally when spoken aloud
+- One CTA for subscription (not begging — value-framed: "Subscribe if you want more X")
+- 2 placeholder links to related videos: [Related: VIDEO_TITLE_HERE]
 
-3. **Tags** (máx 500 caracteres total):
-   - Keyword principal exacta
-   - Variaciones long-tail
-   - Keywords relacionadas
-   - 15-20 tags ordenados por relevancia
-   - Incluye errores comunes de escritura si aplica
+FOOTER:
+- 3 hashtags maximum — one broad (#personalfinance), one niche (#budgettips), one trending if applicable
 
-4. **Texto para thumbnail**:
-   - Máximo 4-5 palabras
-   - Alto contraste, legible en móvil
-   - Complementa el título (NO lo repite)
-   - Genera curiosidad visual
+═══════════════════════════════════════════════
+TAGS RULES (max 500 total chars)
+═══════════════════════════════════════════════
+Order: exact primary keyword → phrase variations → related topics → long-tail questions
+Include: the most common misspelling of the primary keyword if it gets searches
+Exclude: irrelevant broad tags (never tag "YouTube" or "how to" alone)
 
-Todo en INGLÉS.
+═══════════════════════════════════════════════
+THUMBNAIL TEXT RULES
+═══════════════════════════════════════════════
+- Max 5 words — ideally 3
+- Must COMPLEMENT the title (never repeat it word for word)
+- Must create a curiosity gap WITH the title — together they're more powerful than either alone
+- Should match the hook technique used in the script (stat→show the number, contrarian→use "WRONG", challenge→use "STOP")
+- High contrast, reads at 120px wide (mobile thumbnail size)
 
-Responde en JSON con esta estructura:
+Respond ONLY with valid JSON:
 {
   "video_id": "string",
   "titulos": [
     {
       "texto": "string",
       "caracteres": int,
-      "keyword_posicion": "string (dónde está la keyword principal)"
+      "keyword_posicion": "string (word position of primary keyword)",
+      "angulo": "string (what makes this title variant different)"
     }
   ],
-  "titulo_recomendado": "string (el mejor de los 3)",
-  "descripcion": "string (descripción completa lista para copiar)",
+  "titulo_recomendado": "string",
+  "descripcion": "string",
   "tags": ["string"],
   "tags_caracteres_total": int,
-  "texto_thumbnail": "string (4-5 palabras para la miniatura)",
+  "texto_thumbnail": "string (max 5 words)",
   "hashtags": ["string (3 hashtags)"],
   "keyword_principal": "string",
   "keywords_secundarias": ["string"],
-  "notas_seo": ["string (consejos adicionales para este vídeo)"]
+  "intencion_busqueda": "informational|commercial|navigational",
+  "notas_seo": ["string"]
 }"""
 
-def _build_feedback_context(feedback: list = None) -> str:
-    """Construye el contexto de feedback del QC."""
-    if not feedback:
-        return ""
-    ctx = "\n⚠️ FEEDBACK DEL QUALITY CONTROLLER — DEBES APLICAR ESTOS CAMBIOS:\n"
-    for fb in feedback:
-        ctx += f"\n• PROBLEMA: {fb['problema']}\n  SOLUCIÓN: {fb['solucion']}\n"
-    return ctx
 
-def run_seo_optimizer(video_data: dict, video_id: str, feedback: list = None) -> dict:
-    """Genera la optimización SEO completa para un vídeo."""
+def extract_keywords(video_data: dict) -> tuple[str, list[str], str]:
+    """
+    Extracts primary keyword, secondary keywords, and search intent
+    from either the new dict format or the old list format.
+    Returns: (primary, secondaries, intent)
+    """
+    kw = video_data.get("keywords_objetivo", {})
+
+    if isinstance(kw, dict):
+        primary = kw.get("principal", "")
+        secondaries = kw.get("secundarias", [])
+        intent = kw.get("intencion", "informational")
+    elif isinstance(kw, list):
+        # Backward compatibility with old list format
+        primary = kw[0] if kw else ""
+        secondaries = kw[1:] if len(kw) > 1 else []
+        intent = "informational"
+    else:
+        primary = ""
+        secondaries = []
+        intent = "informational"
+
+    return primary, secondaries, intent
+
+
+def run_seo_optimizer(video_data: dict, video_id: str) -> dict:
+    """Generates complete SEO optimization for a video."""
     os.makedirs(SEO_DIR, exist_ok=True)
 
-    print(f"🏷️ [SEO Optimizer] Optimizando {video_id}: {video_data.get('titulo', '')}")
+    print(f"🏷️ [SEO Optimizer] Optimizing {video_id}: {video_data.get('titulo', '')}")
 
-    # Cargar guión si existe para contexto extra
+    primary_kw, secondary_kws, intent = extract_keywords(video_data)
+
+    # Load script if available for context
     script_file = os.path.join(DATA_DIR, "scripts", f"{video_id}.json")
     script_context = ""
     if os.path.exists(script_file):
         with open(script_file, "r", encoding="utf-8") as f:
             script_data = json.load(f)
-        script_context = f"\nRESUMEN DEL GUIÓN: {script_data.get('guion_completo', '')[:500]}..."
+        script_context = f"\nSCRIPT HOOK: {str(script_data.get('hook', ''))[:300]}\nSCRIPT SAMPLE: {script_data.get('guion_completo', '')[:400]}..."
 
-    user_prompt = f"""Optimiza el SEO para este vídeo de YouTube:
+    user_prompt = f"""Generate complete SEO optimization for this YouTube video:
 
-TÍTULO ORIGINAL: {video_data.get('titulo', '')}
-FORMATO: {video_data.get('formato', '')}
-KEYWORDS OBJETIVO: {', '.join(video_data.get('keywords_objetivo', []))}
-DESCRIPCIÓN DEL VÍDEO: {video_data.get('descripcion_breve', '')}
-HOOK: {video_data.get('hook_inicial', '')}
-DURACIÓN: {video_data.get('duracion_estimada_min', 10)} minutos
+TITLE: {video_data.get('titulo', '')}
+FORMAT: {video_data.get('formato', '')}
+ANGLE: {video_data.get('angulo', '')}
+HOOK TECHNIQUE: {video_data.get('hook_tecnica', 'N/A')}
+PRIMARY KEYWORD: {primary_kw}
+SECONDARY KEYWORDS: {', '.join(secondary_kws)}
+SEARCH INTENT: {intent}
+DURATION: {video_data.get('duracion_estimada_min', 10)} minutes
+THUMBNAIL CONCEPT (from strategist): {video_data.get('thumbnail_concepto', 'N/A')}
+VIDEO DESCRIPTION: {video_data.get('descripcion_breve', '')}
 VIDEO ID: {video_id}
 {script_context}
 
-Genera la optimización SEO completa: 3 variantes de título, descripción con timestamps, tags y texto para thumbnail.
-{_build_feedback_context(feedback)}"""
+SPECIFIC INSTRUCTIONS:
+- Primary keyword "{primary_kw}" must appear in the first 3 words of the recommended title
+- Search intent is {intent} — adjust title style accordingly
+- Thumbnail text must pair with the hook technique "{video_data.get('hook_tecnica', '')}" (e.g. stat→show a number, contrarian→use "WRONG", challenge→use "STOP")
+- If a thumbnail concept was provided ("{video_data.get('thumbnail_concepto', '')}"), build on it for the thumbnail text
+- Description line 1 must include "{primary_kw}" and work as a standalone search snippet
+- Include timestamps as placeholders: 0:00 Intro, 1:00 [First Section], etc."""
 
     result = call_llm_json(
         agent_name="seo_optimizer",
@@ -108,29 +148,37 @@ Genera la optimización SEO completa: 3 variantes de título, descripción con t
         temperature=0.5
     )
 
-    # Guardrails
-    titulos = result.get("titulos", [])
-    for t in titulos:
-        if t.get("caracteres", 0) > 60:
-            print(f"⚠️ [SEO] Título demasiado largo ({t['caracteres']} chars): {t['texto']}")
+    # Guardrail: title length
+    for t in result.get("titulos", []):
+        chars = len(t.get("texto", ""))
+        t["caracteres"] = chars
+        if chars > 60:
+            print(f"   ⚠️ Title too long ({chars} chars): {t['texto']}")
 
+    # Guardrail: tags 500 char limit
     tags = result.get("tags", [])
-    tags_total = sum(len(t) for t in tags)
-    if tags_total > 500:
-        print(f"⚠️ [SEO] Tags exceden 500 chars ({tags_total}). Recortando...")
-        while sum(len(t) for t in tags) > 500:
-            tags.pop()
-        result["tags"] = tags
-
-    result["video_id"] = video_id
+    while sum(len(t) for t in tags) > 500:
+        tags.pop()
+    result["tags"] = tags
     result["tags_caracteres_total"] = sum(len(t) for t in tags)
 
-    # Guardar
+    # Guardrail: thumbnail text length
+    thumb_text = result.get("texto_thumbnail", "")
+    if len(thumb_text.split()) > 5:
+        result["texto_thumbnail"] = " ".join(thumb_text.split()[:5])
+        print(f"   ⚠️ Thumbnail text trimmed to 5 words: {result['texto_thumbnail']}")
+
+    result["video_id"] = video_id
+    result["intencion_busqueda"] = intent
+
+    # Save
     output_file = os.path.join(SEO_DIR, f"{video_id}.json")
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
 
-    print(f"✅ [SEO Optimizer] Guardado: {output_file}")
+    print(f"   ✅ [SEO Optimizer] Saved: {output_file}")
+    print(f"   🏷️  Title: {result.get('titulo_recomendado', 'N/A')}")
+    print(f"   🖼️  Thumbnail text: {result.get('texto_thumbnail', 'N/A')}")
     return result
 
 
@@ -146,12 +194,12 @@ if __name__ == "__main__":
 
     videos = calendario.get("calendario", [])
     if video_num < 1 or video_num > len(videos):
-        print(f"❌ Vídeo {video_num} no existe. Rango: 1-{len(videos)}")
+        print(f"❌ Video {video_num} doesn't exist. Range: 1-{len(videos)}")
         sys.exit(1)
 
     video_data = videos[video_num - 1]
     video_id = f"video_{video_num:02d}"
 
-    print(f"🎯 Ejecutando SEO Optimizer para {video_id}: {video_data.get('titulo', '')}")
+    print(f"🎯 Running SEO Optimizer for {video_id}: {video_data.get('titulo', '')}")
     resultado = run_seo_optimizer(video_data, video_id)
     print(json.dumps(resultado, indent=2, ensure_ascii=False))
