@@ -1,12 +1,15 @@
 # agents/thumbnail_conceptor.py
+import logging
+from logging_setup import setup_logging
 import json
 import os
 import base64
 import requests
-from config import ABACUS_API_KEY
+from config import ABACUS_API_KEY, DATA_DIR
 from llm_client import call_llm_json
+from prompt_utils import format_qc_feedback
+logger = logging.getLogger(__name__)
 
-DATA_DIR = "data"
 THUMBNAILS_DIR = os.path.join(DATA_DIR, "thumbnails")
 
 # Hook technique → visual style mapping
@@ -159,7 +162,7 @@ def generate_thumbnail_image(prompt: str, video_id: str) -> str | None:
         images = message.get("images", [])
 
         if not images:
-            print(f"   ⚠️ No image in response. Keys: {list(message.keys())}")
+            logger.warning(f"   ⚠️ No image in response. Keys: {list(message.keys())}")
             return None
 
         img_data = images[0]
@@ -181,39 +184,49 @@ def generate_thumbnail_image(prompt: str, video_id: str) -> str | None:
         if img_b64:
             with open(img_path, "wb") as f:
                 f.write(base64.b64decode(img_b64))
-            print(f"   🖼️ Image saved (base64): {img_path}")
+            logger.info(f"   🖼️ Image saved (base64): {img_path}")
             return img_path
         elif img_url:
             img_response = requests.get(img_url, timeout=60)
             with open(img_path, "wb") as f:
                 f.write(img_response.content)
-            print(f"   🖼️ Image saved (url): {img_path}")
+            logger.info(f"   🖼️ Image saved (url): {img_path}")
             return img_path
 
         return None
 
     except Exception as e:
-        print(f"   ❌ Image generation error: {e}")
+        logger.error(f"   ❌ Image generation error: {e}")
         return None
 
 
-def run_thumbnail_conceptor(video_data: dict, video_id: str) -> dict:
-    """Generates concept + image for the thumbnail."""
+def run_thumbnail_conceptor(video_data: dict, video_id: str, feedback: list | None = None,
+                            seo_data: dict | None = None) -> dict:
+    """Generates concept + image for the thumbnail.
+
+    Depends on the SEO output: `seo_data` is received in memory from the
+    orchestrator; if absent (standalone run), it falls back to the cached file.
+    If `feedback` (Quality Controller changes) is provided, this is a
+    re-generation that must address those specific fixes.
+    """
     os.makedirs(THUMBNAILS_DIR, exist_ok=True)
 
     titulo = video_data.get('titulo', '')
     hook_tecnica = video_data.get('hook_tecnica', '')
     thumbnail_concepto = video_data.get('thumbnail_concepto', '')
 
-    print(f"🎨 [Thumbnail] Designing thumbnail for {video_id}: {titulo}")
+    logger.info(f"🎨 [Thumbnail] Designing thumbnail for {video_id}: {titulo}")
 
-    # Load SEO thumbnail text if available
-    seo_file = os.path.join(DATA_DIR, "seo", f"{video_id}.json")
+    # SEO context: prefer the in-memory data passed by the orchestrator;
+    # fall back to the cached file for standalone runs.
+    if seo_data is None:
+        seo_file = os.path.join(DATA_DIR, "seo", f"{video_id}.json")
+        if os.path.exists(seo_file):
+            with open(seo_file, "r", encoding="utf-8") as f:
+                seo_data = json.load(f)
     texto_seo = ""
     titulo_seo = ""
-    if os.path.exists(seo_file):
-        with open(seo_file, "r", encoding="utf-8") as f:
-            seo_data = json.load(f)
+    if seo_data:
         texto_seo = seo_data.get("texto_thumbnail", "")
         titulo_seo = seo_data.get("titulo_recomendado", "")
 
@@ -243,6 +256,10 @@ DESIGN REQUIREMENTS:
 
 Write a detailed Ideogram 3.0 prompt (80-150 words) that specifies: exact text, typography style, colors with hex codes, composition, style. Be specific — Ideogram performs best with precise instructions."""
 
+    user_prompt += format_qc_feedback(feedback)
+    if feedback:
+        logger.info(f"   🔧 Regenerating with {len(feedback)} QC fix(es)")
+
     result = call_llm_json(
         agent_name="thumbnail_conceptor",
         system_prompt=SYSTEM_PROMPT,
@@ -256,11 +273,11 @@ Write a detailed Ideogram 3.0 prompt (80-150 words) that specifies: exact text, 
     # Generate image
     prompt = result.get("prompt_imagen", "")
     if prompt:
-        print(f"   🖌️ Generating image with Ideogram 3.0 (technique: {hook_tecnica})...")
+        logger.info(f"   🖌️ Generating image with Ideogram 3.0 (technique: {hook_tecnica})...")
         img_path = generate_thumbnail_image(prompt, video_id)
         result["imagen_path"] = img_path
     else:
-        print("   ⚠️ No image prompt generated.")
+        logger.warning("   ⚠️ No image prompt generated.")
         result["imagen_path"] = None
 
     # Save concept
@@ -269,13 +286,14 @@ Write a detailed Ideogram 3.0 prompt (80-150 words) that specifies: exact text, 
         json.dump(result, f, indent=2, ensure_ascii=False)
 
     concepto = result.get("concepto", {})
-    print(f"   ✅ [Thumbnail] Saved: {output_file}")
-    print(f"   🎨 Text: '{concepto.get('texto_overlay', 'N/A')}' | Colors: {concepto.get('esquema_colores', 'N/A')}")
-    print(f"   💡 CTR rationale: {result.get('justificacion_ctr', 'N/A')}")
+    logger.info(f"   ✅ [Thumbnail] Saved: {output_file}")
+    logger.info(f"   🎨 Text: '{concepto.get('texto_overlay', 'N/A')}' | Colors: {concepto.get('esquema_colores', 'N/A')}")
+    logger.info(f"   💡 CTR rationale: {result.get('justificacion_ctr', 'N/A')}")
     return result
 
 
 if __name__ == "__main__":
+    setup_logging()
     import sys
 
     CONTENT_CALENDAR_FILE = os.path.join(DATA_DIR, "content_calendar.json")
@@ -287,12 +305,12 @@ if __name__ == "__main__":
 
     videos = calendario.get("calendario", [])
     if video_num < 1 or video_num > len(videos):
-        print(f"❌ Video {video_num} doesn't exist. Range: 1-{len(videos)}")
+        logger.error(f"❌ Video {video_num} doesn't exist. Range: 1-{len(videos)}")
         sys.exit(1)
 
     video_data = videos[video_num - 1]
     video_id = f"video_{video_num:02d}"
 
-    print(f"🎯 Running Thumbnail Conceptor for {video_id}: {video_data.get('titulo', '')}")
+    logger.info(f"🎯 Running Thumbnail Conceptor for {video_id}: {video_data.get('titulo', '')}")
     resultado = run_thumbnail_conceptor(video_data, video_id)
-    print(json.dumps(resultado, indent=2, ensure_ascii=False))
+    logger.info(json.dumps(resultado, indent=2, ensure_ascii=False))

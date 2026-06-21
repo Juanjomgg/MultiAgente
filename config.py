@@ -4,6 +4,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# === RUTAS (ancladas a la raíz del proyecto, no al directorio de trabajo) ===
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(PROJECT_ROOT, "data")
+
 # === API KEYS (desde .env) ===
 ABACUS_API_KEY = os.getenv("ABACUS_API_KEY")
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
@@ -36,4 +40,12 @@ AGENT_MAX_TOKENS = {
     "seo_optimizer":      1500,
     "thumbnail_conceptor": 1000,
     "quality_controller": 3000,
+}
+
+# === PRECIOS POR MODELO (USD por 1M tokens) — opcional ===
+# Rellena con los precios de tu proveedor para ver el coste en los resúmenes.
+# Si un modelo no está aquí, su coste se reporta como "—" (solo tokens).
+# Formato: "nombre_modelo": {"input": float, "output": float}
+MODEL_PRICING = {
+    # "claude-opus-4-7": {"input": 15.0, "output": 75.0},
 }

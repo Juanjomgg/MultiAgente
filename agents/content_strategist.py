@@ -1,10 +1,13 @@
 # agents/content_strategist.py
+import logging
+from logging_setup import setup_logging
 import json
 import os
 from collections import Counter
 from llm_client import call_llm_json
+from config import DATA_DIR
+logger = logging.getLogger(__name__)
 
-DATA_DIR = "data"
 VALIDATED_NICHES_FILE = os.path.join(DATA_DIR, "validated_niches.json")
 CONTENT_CALENDAR_FILE = os.path.join(DATA_DIR, "content_calendar.json")
 
@@ -128,6 +131,19 @@ CALENDAR ITEM OUTPUT (repeat x30)
   "descripcion_breve": "string (1-2 sentences, what value the viewer gets)"
 }
 
+═══════════════════════════════════════════════
+FULL JSON STRUCTURE TO RETURN (top level)
+═══════════════════════════════════════════════
+
+Return ONE JSON object with EXACTLY these two top-level keys:
+
+{
+  "estrategia_canal": { ... the channel strategy object defined above ... },
+  "calendario": [ ... an array of EXACTLY 30 calendar item objects defined above ... ]
+}
+
+The array of 30 videos MUST be under the key "calendario" (exactly that name, no other).
+
 CRITICAL: Generate ALL 30 videos. No placeholders. Verify before responding that:
 - No two videos share the same angle
 - No hook technique is used more than 5 times
@@ -181,11 +197,32 @@ def validate_calendar(calendario: list) -> list:
     return warnings
 
 
+def _extract_calendar(result: dict) -> list:
+    """Extrae la lista de vídeos del calendario tolerando claves alternativas.
+
+    La clave canónica es "calendario"; si el LLM usa otra (calendar, videos…),
+    se recupera para no producir un calendario vacío de forma silenciosa.
+    """
+    if isinstance(result.get("calendario"), list):
+        return result["calendario"]
+    for alt in ("calendar", "videos", "calendario_contenido", "content_calendar", "calendar_items"):
+        if isinstance(result.get(alt), list):
+            logger.warning(f"⚠️ [Content Strategist] Calendario bajo clave alternativa '{alt}', normalizando.")
+            return result[alt]
+    # Último recurso: la primera lista cuyos elementos parezcan ítems de vídeo.
+    for value in result.values():
+        if (isinstance(value, list) and value and isinstance(value[0], dict)
+                and ("titulo" in value[0] or "dia" in value[0])):
+            logger.warning("⚠️ [Content Strategist] Calendario detectado por heurística de contenido.")
+            return value
+    return []
+
+
 def run_content_strategist() -> dict:
     """Runs the Content Strategist and generates the editorial calendar."""
-    print("🗓️ [Content Strategist] Loading winning niche...")
+    logger.info("🗓️ [Content Strategist] Loading winning niche...")
     niche_data = load_winning_niche()
-    print(f"📌 [Content Strategist] Niche: {niche_data['nombre']}")
+    logger.info(f"📌 [Content Strategist] Niche: {niche_data['nombre']}")
 
     user_prompt = f"""Create a 30-video content calendar for a FACELESS English-language YouTube channel in this niche:
 
@@ -215,7 +252,14 @@ Generate the complete channel strategy and all 30 calendar entries. No placehold
         temperature=0.7
     )
 
-    calendario = result.get("calendario", [])
+    calendario = _extract_calendar(result)
+    result["calendario"] = calendario  # normaliza a la clave canónica para guardar
+
+    if not calendario:
+        raise ValueError(
+            "❌ [Content Strategist] El LLM no devolvió ningún calendario. "
+            f"Claves de nivel superior recibidas: {list(result.keys())}"
+        )
 
     # Normalize keywords_objetivo: handle both dict and list formats
     for video in calendario:
@@ -230,45 +274,46 @@ Generate the complete channel strategy and all 30 calendar entries. No placehold
 
     # Guardrail: count check
     if len(calendario) < 30:
-        print(f"⚠️ [Content Strategist] Only {len(calendario)}/30 videos generated.")
+        logger.warning(f"⚠️ [Content Strategist] Only {len(calendario)}/30 videos generated.")
 
     # Guardrail: validate calendar quality
     if calendario:
         warnings = validate_calendar(calendario)
         if warnings:
-            print(f"\n⚠️ [Content Strategist] Calendar quality warnings:")
+            logger.warning(f"\n⚠️ [Content Strategist] Calendar quality warnings:")
             for w in warnings:
-                print(f"   {w}")
+                logger.info(f"   {w}")
         else:
-            print(f"✅ [Content Strategist] Calendar passed all quality checks.")
+            logger.info(f"✅ [Content Strategist] Calendar passed all quality checks.")
 
     # Save
     with open(CONTENT_CALENDAR_FILE, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
 
-    print(f"\n✅ [Content Strategist] Calendar generated: {len(calendario)} videos.")
-    print(f"   Saved to {CONTENT_CALENDAR_FILE}")
+    logger.info(f"\n✅ [Content Strategist] Calendar generated: {len(calendario)} videos.")
+    logger.info(f"   Saved to {CONTENT_CALENDAR_FILE}")
 
     estrategia = result.get("estrategia_canal", {})
     if estrategia:
-        print(f"   📺 Channel names: {estrategia.get('nombre_canal_sugerido', 'N/A')}")
-        print(f"   💎 Value prop: {estrategia.get('propuesta_valor', 'N/A')}")
+        logger.info(f"   📺 Channel names: {estrategia.get('nombre_canal_sugerido', 'N/A')}")
+        logger.info(f"   💎 Value prop: {estrategia.get('propuesta_valor', 'N/A')}")
         pilares = estrategia.get("pilares_contenido", [])
         for p in pilares:
             cluster = ', '.join(p.get('keywords_cluster', [])[:3])
-            print(f"   📌 {p['nombre']} ({p.get('porcentaje_contenido', '?')}%) — {cluster}...")
+            logger.info(f"   📌 {p['nombre']} ({p.get('porcentaje_contenido', '?')}%) — {cluster}...")
 
     # Print hook technique distribution
     if calendario:
         tecnicas = Counter(v.get("hook_tecnica", "unknown") for v in calendario)
-        print(f"\n   🎣 Hook technique distribution:")
+        logger.info(f"\n   🎣 Hook technique distribution:")
         for t, c in sorted(tecnicas.items(), key=lambda x: -x[1]):
             bar = "█" * c
-            print(f"      {t:20s} {bar} ({c})")
+            logger.info(f"      {t:20s} {bar} ({c})")
 
     return result
 
 
 if __name__ == "__main__":
+    setup_logging()
     resultado = run_content_strategist()
-    print(json.dumps(resultado, indent=2, ensure_ascii=False))
+    logger.info(json.dumps(resultado, indent=2, ensure_ascii=False))

@@ -1,11 +1,14 @@
 # agents/niche_validator.py
+import logging
+from logging_setup import setup_logging
 import json
 import os
 import time
 from pytrends.request import TrendReq
 from llm_client import call_llm_json
+from config import DATA_DIR
+logger = logging.getLogger(__name__)
 
-DATA_DIR = "data"
 NICHE_ANALYSIS_FILE = os.path.join(DATA_DIR, "niche_analysis.json")
 VALIDATED_NICHES_FILE = os.path.join(DATA_DIR, "validated_niches.json")
 
@@ -46,7 +49,7 @@ def get_trends_data(keywords, timeframe="today 12-m", geo="US"):
                         }
             time.sleep(2)  # evitar rate limiting
         except Exception as e:
-            print(f"   ⚠️ Error en Google Trends para {batch}: {e}")
+            logger.warning(f"   ⚠️ Error en Google Trends para {batch}: {e}")
             for kw in batch:
                 results[kw] = {"error": str(e)}
 
@@ -55,11 +58,11 @@ def get_trends_data(keywords, timeframe="today 12-m", geo="US"):
 
 def run_niche_validator() -> dict:
     """Valida los nichos con Google Trends + análisis LLM."""
-    print("📊 [Niche Validator] Cargando nichos...")
+    logger.info("📊 [Niche Validator] Cargando nichos...")
     nichos = load_niches()
 
     # === FASE 1: Google Trends ===
-    print(f"📈 [Niche Validator] Consultando Google Trends para {len(nichos)} nichos...")
+    logger.info(f"📈 [Niche Validator] Consultando Google Trends para {len(nichos)} nichos...")
 
     # Extraer keywords de búsqueda de cada nicho
     keywords = [n["nombre"].lower() for n in nichos]
@@ -70,10 +73,10 @@ def run_niche_validator() -> dict:
         key = nicho["nombre"].lower()
         nicho["google_trends"] = trends_data.get(key, {"error": "no data"})
 
-    print("✅ [Niche Validator] Datos de Google Trends obtenidos.")
+    logger.info("✅ [Niche Validator] Datos de Google Trends obtenidos.")
 
     # === FASE 2: Validación con LLM ===
-    print("🧠 [Niche Validator] Analizando con LLM...")
+    logger.info("🧠 [Niche Validator] Analizando con LLM...")
 
     system_prompt = """Eres un analista de datos experto en YouTube y marketing digital.
 Te voy a pasar nichos propuestos junto con datos REALES de Google Trends.
@@ -133,12 +136,13 @@ Analiza críticamente cada uno y dame tu veredicto final con el nicho ganador.""
     with open(VALIDATED_NICHES_FILE, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
 
-    print(f"✅ [Niche Validator] Validación completa. Guardado en {VALIDATED_NICHES_FILE}")
-    print(f"🏆 Nicho ganador: {ganador}")
+    logger.info(f"✅ [Niche Validator] Validación completa. Guardado en {VALIDATED_NICHES_FILE}")
+    logger.info(f"🏆 Nicho ganador: {ganador}")
 
     return result
 
 
 if __name__ == "__main__":
+    setup_logging()
     resultado = run_niche_validator()
-    print(json.dumps(resultado, indent=2, ensure_ascii=False))
+    logger.info(json.dumps(resultado, indent=2, ensure_ascii=False))

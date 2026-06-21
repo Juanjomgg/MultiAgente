@@ -1,15 +1,21 @@
 # llm_client.py
+import logging
 import requests
 import json
 import time
 from config import ABACUS_API_KEY, ABACUS_BASE_URL, AGENT_MODELS, AGENT_MAX_TOKENS
+import usage_tracker
+logger = logging.getLogger(__name__)
 
 
 def call_llm(agent_name: str, system_prompt: str, user_prompt: str, 
-             temperature: float = 0.7, retries: int = 2) -> str:
+             temperature: float = 0.7, retries: int = 2,
+             json_mode: bool = False) -> str:
     """
     Llama al LLM asignado a un agente via Abacus.AI API.
-    Incluye retry logic y validación básica.
+    Incluye retry logic, validación básica, detección de truncamiento y, si
+    json_mode=True, salida JSON nativa (response_format) con degradación
+    automática cuando el endpoint no la soporta.
     """
     model = AGENT_MODELS.get(agent_name)
     max_tokens = AGENT_MAX_TOKENS.get(agent_name, 2000)
@@ -31,8 +37,13 @@ def call_llm(agent_name: str, system_prompt: str, user_prompt: str,
         "max_tokens": max_tokens,
         "temperature": temperature,
     }
+    if json_mode:
+        # Salida JSON nativa del API (más fiable que pedirlo solo por prompt).
+        payload["response_format"] = {"type": "json_object"}
 
-    for attempt in range(1, retries + 1):
+    attempt = 0
+    while attempt < retries:
+        attempt += 1
         try:
             response = requests.post(
                 ABACUS_BASE_URL, 
@@ -42,16 +53,36 @@ def call_llm(agent_name: str, system_prompt: str, user_prompt: str,
             )
             response.raise_for_status()
             data = response.json()
-            content = data["choices"][0]["message"]["content"]
+            choice = data["choices"][0]
+            content = choice["message"]["content"]
+
+            if choice.get("finish_reason") == "length":
+                logger.warning(
+                    f"⚠️ [{agent_name}] Respuesta truncada por max_tokens "
+                    f"({max_tokens}). Considera subir AGENT_MAX_TOKENS."
+                )
 
             if not content or len(content.strip()) < 10:
                 raise ValueError("Respuesta vacía o demasiado corta del LLM.")
 
-            print(f"✅ [{agent_name}] Respuesta recibida ({len(content)} chars)")
+            usage_tracker.record(agent_name, model, data.get("usage", {}))
+            logger.info(f"✅ [{agent_name}] Respuesta recibida ({len(content)} chars)")
             return content.strip()
 
         except (requests.RequestException, KeyError, ValueError) as e:
-            print(f"⚠️ [{agent_name}] Intento {attempt}/{retries} falló: {e}")
+            # Si el endpoint no acepta response_format, degradamos a modo prompt
+            # y reintentamos sin gastar este intento (solo puede ocurrir una vez).
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            if "response_format" in payload and status in (400, 422):
+                logger.warning(
+                    f"⚠️ [{agent_name}] El endpoint no aceptó response_format; "
+                    f"reintentando sin JSON mode nativo."
+                )
+                payload.pop("response_format", None)
+                attempt -= 1
+                continue
+
+            logger.warning(f"⚠️ [{agent_name}] Intento {attempt}/{retries} falló: {e}")
             if attempt < retries:
                 time.sleep(2 * attempt)  # backoff exponencial
             else:
@@ -87,7 +118,7 @@ def call_llm_json(agent_name: str, system_prompt: str, user_prompt: str,
     # Añadimos instrucción explícita de formato JSON al system prompt
     json_system = system_prompt + "\n\nIMPORTANTE: Responde ÚNICAMENTE con JSON válido. Sin texto adicional, sin markdown, sin ```json."
     
-    raw = call_llm(agent_name, json_system, user_prompt, temperature, retries)
+    raw = call_llm(agent_name, json_system, user_prompt, temperature, retries, json_mode=True)
 
     # Limpieza por si el modelo envuelve en markdown
     cleaned = raw.strip()
@@ -101,7 +132,7 @@ def call_llm_json(agent_name: str, system_prompt: str, user_prompt: str,
         return json.loads(cleaned)
     except json.JSONDecodeError as e:
         # Intentar reparar JSON truncado
-        print(f"⚠️ [{agent_name}] JSON truncado, intentando reparar...")
+        logger.warning(f"⚠️ [{agent_name}] JSON truncado, intentando reparar...")
         repaired = _repair_json(cleaned)
         if repaired:
             return repaired

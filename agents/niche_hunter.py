@@ -1,9 +1,12 @@
 # agents/niche_hunter.py
+import logging
+from logging_setup import setup_logging
 import json
 import os
 from llm_client import call_llm_json
+from config import DATA_DIR
+logger = logging.getLogger(__name__)
 
-DATA_DIR = "data"
 QUALIFYING_CHANNELS_FILE = os.path.join(DATA_DIR, "qualifying_channels.json")
 NICHE_RESULTS_FILE = os.path.join(DATA_DIR, "niche_analysis.json")
 
@@ -83,10 +86,10 @@ Ordena los nichos de mayor a menor puntuación final. Propón entre 5 y 10 nicho
 
 def run_niche_hunter() -> dict:
     """Ejecuta el Niche Hunter: analiza canales reales y propone nichos."""
-    print("🔍 [Niche Hunter] Cargando canales qualifying...")
+    logger.info("🔍 [Niche Hunter] Cargando canales qualifying...")
     channels = load_channels()
 
-    print(f"📊 [Niche Hunter] Analizando {len(channels)} canales con LLM...")
+    logger.info(f"📊 [Niche Hunter] Analizando {len(channels)} canales con LLM...")
     channel_summary = build_channel_summary(channels)
 
     user_prompt = f"""Analiza los siguientes canales de YouTube que han crecido rápidamente en los últimos 12 meses.
@@ -121,10 +124,11 @@ Basándote en estos datos reales, propón los mejores nichos ordenados por puntu
     with open(NICHE_RESULTS_FILE, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
 
-    print(f"✅ [Niche Hunter] {len(nichos_validos)} nichos identificados. Guardado en {NICHE_RESULTS_FILE}")
+    logger.info(f"✅ [Niche Hunter] {len(nichos_validos)} nichos identificados. Guardado en {NICHE_RESULTS_FILE}")
     return result
 
 
 if __name__ == "__main__":
+    setup_logging()
     resultado = run_niche_hunter()
-    print(json.dumps(resultado, indent=2, ensure_ascii=False))
+    logger.info(json.dumps(resultado, indent=2, ensure_ascii=False))

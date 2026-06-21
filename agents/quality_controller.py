@@ -1,9 +1,13 @@
 # agents/quality_controller.py
+import logging
+from logging_setup import setup_logging
 import json
 import os
 from llm_client import call_llm_json
+from constants import VERDICT_ENUM_STR, QC_AREA_ENUM_STR, normalize_verdict
+from config import DATA_DIR
+logger = logging.getLogger(__name__)
 
-DATA_DIR = "data"
 QC_DIR = os.path.join(DATA_DIR, "quality_checks")
 
 
@@ -85,18 +89,24 @@ Respond ONLY with valid JSON:
     "coherencia": int
   },
   "media": float,
-  "veredicto": "APPROVED|REVISE|REJECTED",
+  "veredicto": "__VERDICT_ENUM__",
   "resumen": "string (2-3 sentences, brutally honest)",
   "puntos_fuertes": ["string"],
   "puntos_debiles": ["string"],
   "cambios_requeridos": [
     {
-      "area": "string (hook|open_loops|pattern_interrupts|rescate_65|tts|seo|thumbnail|coherencia)",
+      "area": "string (__QC_AREA_ENUM__)",
       "problema": "string (specific, not vague)",
       "solucion": "string (exact change with before/after if possible)"
     }
   ]
 }"""
+
+# Inyectamos los valores canónicos del contrato (constants.py) en el prompt
+# para que los enums del JSON de salida no puedan desincronizarse del código.
+SYSTEM_PROMPT = SYSTEM_PROMPT.replace("__VERDICT_ENUM__", VERDICT_ENUM_STR).replace(
+    "__QC_AREA_ENUM__", QC_AREA_ENUM_STR
+)
 
 
 def run_quality_check(video_result: dict) -> dict:
@@ -104,7 +114,7 @@ def run_quality_check(video_result: dict) -> dict:
     os.makedirs(QC_DIR, exist_ok=True)
 
     video_id = video_result.get("video_id", "unknown")
-    print(f"🔍 [Quality Controller] Reviewing {video_id}...")
+    logger.info(f"🔍 [Quality Controller] Reviewing {video_id}...")
 
     results = video_result.get("results", {})
     errors = video_result.get("errors", {})
@@ -187,40 +197,43 @@ For cambios_requeridos: provide exact text replacements where possible, not gene
         valores = [v for v in puntuaciones.values() if isinstance(v, (int, float))]
         result["media"] = round(sum(valores) / len(valores), 1) if valores else 0
 
-    veredicto = result.get("veredicto", "REVISE")
+    # Normalizamos el veredicto contra el enum del contrato (constants.py).
+    result["veredicto"] = normalize_verdict(result.get("veredicto")).value
+    veredicto = result["veredicto"]
 
     # Print results — fixed: print IS inside the loop
-    print(f"\n   {'─'*38}")
-    print(f"   📊 QUALITY CHECK — {video_id}")
-    print(f"   {'─'*38}")
+    logger.info(f"\n   {'─'*38}")
+    logger.info(f"   📊 QUALITY CHECK — {video_id}")
+    logger.info(f"   {'─'*38}")
     for k, v in puntuaciones.items():
         v_int = int(v) if isinstance(v, (str, float)) else v
         barra = "█" * v_int + "░" * (10 - v_int)
-        print(f"   {k:20s} [{barra}] {v_int}/10")
-    print(f"   {'─'*38}")
-    print(f"   📈 Average: {result.get('media', 'N/A')}")
+        logger.info(f"   {k:20s} [{barra}] {v_int}/10")
+    logger.info(f"   {'─'*38}")
+    logger.info(f"   📈 Average: {result.get('media', 'N/A')}")
 
     emoji = {"APPROVED": "✅", "REVISE": "⚠️", "REJECTED": "❌"}.get(veredicto, "❓")
-    print(f"   {emoji} Verdict: {veredicto}")
-    print(f"   💬 {result.get('resumen', '')}")
+    logger.info(f"   {emoji} Verdict: {veredicto}")
+    logger.info(f"   💬 {result.get('resumen', '')}")
 
     cambios = result.get("cambios_requeridos", [])
     if cambios:
-        print(f"\n   🔧 Required changes:")
+        logger.info(f"\n   🔧 Required changes:")
         for c in cambios:
-            print(f"      • [{c.get('area', '?')}] {c.get('problema', '')}")
-            print(f"        → {c.get('solucion', '')}")
+            logger.info(f"      • [{c.get('area', '?')}] {c.get('problema', '')}")
+            logger.info(f"        → {c.get('solucion', '')}")
 
     # Save
     output_file = os.path.join(QC_DIR, f"{video_id}_qc.json")
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
 
-    print(f"\n   💾 Saved: {output_file}")
+    logger.info(f"\n   💾 Saved: {output_file}")
     return result
 
 
 if __name__ == "__main__":
+    setup_logging()
     import sys
 
     VIDEO_OUTPUT_DIR = os.path.join(DATA_DIR, "videos_output")
@@ -230,12 +243,12 @@ if __name__ == "__main__":
 
     video_file = os.path.join(VIDEO_OUTPUT_DIR, f"{video_id}.json")
     if not os.path.exists(video_file):
-        print(f"❌ {video_file} not found. Run the pipeline for {video_id} first.")
+        logger.error(f"❌ {video_file} not found. Run the pipeline for {video_id} first.")
         sys.exit(1)
 
     with open(video_file, "r", encoding="utf-8") as f:
         video_result = json.load(f)
 
-    print(f"🎯 Running Quality Check for {video_id}")
+    logger.info(f"🎯 Running Quality Check for {video_id}")
     resultado = run_quality_check(video_result)
-    print(json.dumps(resultado, indent=2, ensure_ascii=False))
+    logger.info(json.dumps(resultado, indent=2, ensure_ascii=False))

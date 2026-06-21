@@ -1,9 +1,13 @@
 # agents/script_writer.py
+import logging
+from logging_setup import setup_logging
 import json
 import os
 from llm_client import call_llm, call_llm_json
+from prompt_utils import format_qc_feedback
+from config import DATA_DIR
+logger = logging.getLogger(__name__)
 
-DATA_DIR = "data"
 SCRIPTS_DIR = os.path.join(DATA_DIR, "scripts")
 
 SCRIPT_PROMPT = """You are a world-class YouTube scriptwriter specializing in FACELESS channels that achieve 50%+ average view duration. Your scripts are engineered — not just written — using proven psychological retention mechanics.
@@ -188,14 +192,18 @@ def _save_section(sections, section_name, text_lines, count):
         })
 
 
-def run_script_writer(video_data: dict, video_id: str) -> dict:
-    """Generates a complete YouTube script in 2 phases."""
+def run_script_writer(video_data: dict, video_id: str, feedback: list | None = None) -> dict:
+    """Generates a complete YouTube script in 2 phases.
+
+    If `feedback` (Quality Controller changes) is provided, this is a
+    re-generation that must address those specific fixes.
+    """
     os.makedirs(SCRIPTS_DIR, exist_ok=True)
 
     titulo = video_data.get('titulo', 'Sin título')
     duracion = video_data.get('duracion_estimada_min', 10)
 
-    print(f"✍️ [Script Writer] Generating script for {video_id}: {titulo}")
+    logger.info(f"✍️ [Script Writer] Generating script for {video_id}: {titulo}")
 
     # Normalize keywords — handle both dict and list formats
     kw = video_data.get('keywords_objetivo', {})
@@ -232,7 +240,11 @@ REQUIREMENTS:
 - TTS-optimized: max 15 words per sentence, contractions mandatory
 - Write the COMPLETE script word-for-word, ready for AI voiceover narration"""
 
-    print(f"   📝 Phase 1: Generating plain-text script...")
+    user_prompt += format_qc_feedback(feedback)
+    if feedback:
+        logger.info(f"   🔧 Regenerating with {len(feedback)} QC fix(es)")
+
+    logger.info(f"   📝 Phase 1: Generating plain-text script...")
     raw_script = call_llm(
         agent_name="script_writer",
         system_prompt=SCRIPT_PROMPT,
@@ -241,7 +253,7 @@ REQUIREMENTS:
     )
 
     # === PHASE 2: Lightweight metadata JSON ===
-    print(f"   📊 Phase 2: Extracting metadata...")
+    logger.info(f"   📊 Phase 2: Extracting metadata...")
     try:
         metadata = call_llm_json(
             agent_name="seo_optimizer",  # cheaper model for metadata
@@ -250,7 +262,7 @@ REQUIREMENTS:
             temperature=0.3
         )
     except Exception as e:
-        print(f"   ⚠️ Metadata failed, using defaults: {e}")
+        logger.warning(f"   ⚠️ Metadata failed, using defaults: {e}")
         metadata = {
             "duracion_estimada_min": duracion,
             "tecnica_hook": "unknown",
@@ -267,7 +279,7 @@ REQUIREMENTS:
     min_palabras = duracion * 100
 
     if palabras < min_palabras:
-        print(f"   ⚠️ Script short: {palabras} words (minimum: {min_palabras})")
+        logger.warning(f"   ⚠️ Script short: {palabras} words (minimum: {min_palabras})")
 
     result = {
         "video_id": video_id,
@@ -292,12 +304,13 @@ REQUIREMENTS:
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
 
-    print(f"   ✅ [Script Writer] Saved: {output_file} ({palabras} words)")
-    print(f"   🔁 Open loops: {len(result['open_loops_planted'])} | Pattern interrupts: {result['pattern_interrupts_count']} | 65% rescue: {result['has_65_percent_rescue']}")
+    logger.info(f"   ✅ [Script Writer] Saved: {output_file} ({palabras} words)")
+    logger.info(f"   🔁 Open loops: {len(result['open_loops_planted'])} | Pattern interrupts: {result['pattern_interrupts_count']} | 65% rescue: {result['has_65_percent_rescue']}")
     return result
 
 
 if __name__ == "__main__":
+    setup_logging()
     import sys
 
     # BUG FIX: define CONTENT_CALENDAR_FILE BEFORE using it
@@ -310,11 +323,11 @@ if __name__ == "__main__":
 
     videos = calendario.get("calendario", [])
     if video_num < 1 or video_num > len(videos):
-        print(f"❌ Video {video_num} doesn't exist. Range: 1-{len(videos)}")
+        logger.error(f"❌ Video {video_num} doesn't exist. Range: 1-{len(videos)}")
         sys.exit(1)
 
     video_data = videos[video_num - 1]
     video_id = f"video_{video_num:02d}"
 
-    print(f"🎯 Running Script Writer for {video_id}: {video_data.get('titulo', '')}")
+    logger.info(f"🎯 Running Script Writer for {video_id}: {video_data.get('titulo', '')}")
     resultado = run_script_writer(video_data, video_id)

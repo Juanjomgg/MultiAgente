@@ -1,13 +1,15 @@
 # agents/niche_hunter_scraper.py
+import logging
+from logging_setup import setup_logging
 import requests
 import json
 import os
 import time
 from datetime import datetime, timedelta, timezone
-from config import YOUTUBE_API_KEY
+from config import YOUTUBE_API_KEY, DATA_DIR
+logger = logging.getLogger(__name__)
 
 # === ARCHIVOS DE PROGRESO ===
-DATA_DIR = "data"
 COLLECTED_IDS_FILE = os.path.join(DATA_DIR, "collected_ids.txt")
 CHECKED_IDS_FILE = os.path.join(DATA_DIR, "checked_ids.txt")
 COMPLETED_SEARCHES_FILE = os.path.join(DATA_DIR, "completed_searches.txt")
@@ -98,11 +100,11 @@ def print_resume_status():
     checked = load_lines(CHECKED_IDS_FILE)
     qualifying = load_qualifying()
 
-    print("\n📊 RESUME STATUS")
-    print(f"   Keywords searched: {len(completed)}/90")
-    print(f"   Channel IDs collected: {len(collected)}")
-    print(f"   IDs validated: {len(checked)}")
-    print(f"   Qualifying channels: {len(qualifying)}/{TARGET_CHANNELS}\n")
+    logger.info("\n📊 RESUME STATUS")
+    logger.info(f"   Keywords searched: {len(completed)}/90")
+    logger.info(f"   Channel IDs collected: {len(collected)}")
+    logger.info(f"   IDs validated: {len(checked)}")
+    logger.info(f"   Qualifying channels: {len(qualifying)}/{TARGET_CHANNELS}\n")
 
     return completed, collected, checked, qualifying
 
@@ -132,7 +134,7 @@ def search_videos(keyword):
 
     response = requests.get(f"{YOUTUBE_API_BASE}/search", params=params, timeout=30)
     units_used += 100
-    print(f"   Units used: {units_used}/{DAILY_QUOTA}")
+    logger.info(f"   Units used: {units_used}/{DAILY_QUOTA}")
 
     response.raise_for_status()
     data = response.json()
@@ -161,7 +163,7 @@ def validate_channels(channel_ids_to_check):
     batch_num = 0
     for batch in batches:
         if units_used >= DAILY_QUOTA:
-            print("⚠️ Cuota diaria alcanzada durante validación.")
+            logger.warning("⚠️ Cuota diaria alcanzada durante validación.")
             break
 
         batch_num += 1
@@ -175,7 +177,7 @@ def validate_channels(channel_ids_to_check):
 
         response = requests.get(f"{YOUTUBE_API_BASE}/channels", params=params, timeout=30)
         units_used += len(batch)  # 1 unit por canal
-        print(f"   Units used: {units_used}/{DAILY_QUOTA}")
+        logger.info(f"   Units used: {units_used}/{DAILY_QUOTA}")
 
         response.raise_for_status()
         data = response.json()
@@ -213,13 +215,15 @@ def validate_channels(channel_ids_to_check):
         # Marcar como checkeados
         append_lines(CHECKED_IDS_FILE, batch)
 
-        print(f"   Batch {batch_num}: checked {len(batch)} | "
-              f"✅ {passed} passed | ⏰ {too_old} too old | "
-              f"⬇️ {subs_low} subs low | ⬆️ {subs_high} subs high | "
-              f"🎬 {too_many_vids} too many videos")
+        logger.info(
+            f"   Batch {batch_num}: checked {len(batch)} | "
+            f"✅ {passed} passed | ⏰ {too_old} too old | "
+            f"⬇️ {subs_low} subs low | ⬆️ {subs_high} subs high | "
+            f"🎬 {too_many_vids} too many videos"
+        )
 
         if len(qualifying) >= TARGET_CHANNELS:
-            print(f"🎯 ¡Objetivo de {TARGET_CHANNELS} canales alcanzado!")
+            logger.info(f"🎯 ¡Objetivo de {TARGET_CHANNELS} canales alcanzado!")
             break
 
         time.sleep(0.2)
@@ -236,51 +240,52 @@ def run_scraper():
     completed, collected, checked, qualifying = print_resume_status()
 
     if len(qualifying) >= TARGET_CHANNELS:
-        print(f"✅ Ya tienes {len(qualifying)} canales. No es necesario buscar más.")
+        logger.info(f"✅ Ya tienes {len(qualifying)} canales. No es necesario buscar más.")
         return qualifying
 
     # === FASE 1: BÚSQUEDA ===
-    print("🔍 FASE 1: Buscando vídeos por keywords...\n")
+    logger.info("🔍 FASE 1: Buscando vídeos por keywords...\n")
     new_ids = set()
 
     for i, keyword in enumerate(KEYWORDS):
         if keyword in completed:
             continue
         if units_used >= DAILY_QUOTA:
-            print("⚠️ Cuota diaria alcanzada. Ejecuta de nuevo mañana.")
+            logger.warning("⚠️ Cuota diaria alcanzada. Ejecuta de nuevo mañana.")
             break
 
-        print(f"[{i+1}/90] Buscando: \"{keyword}\"")
+        logger.info(f"[{i+1}/90] Buscando: \"{keyword}\"")
         try:
             ids = search_videos(keyword)
             new_ids.update(ids)
             append_lines(COLLECTED_IDS_FILE, ids - collected)
             collected.update(ids)
             append_lines(COMPLETED_SEARCHES_FILE, [keyword])
-            print(f"   → {len(ids)} canales encontrados (total acumulado: {len(collected)})")
+            logger.info(f"   → {len(ids)} canales encontrados (total acumulado: {len(collected)})")
             time.sleep(0.3)
         except Exception as e:
-            print(f"   ❌ Error en \"{keyword}\": {e}")
+            logger.error(f"   ❌ Error en \"{keyword}\": {e}")
             continue
 
     # === FASE 2: VALIDACIÓN ===
-    print(f"\n📋 FASE 2: Validando {len(collected) - len(checked)} canales pendientes...\n")
+    logger.info(f"\n📋 FASE 2: Validando {len(collected) - len(checked)} canales pendientes...\n")
     qualifying = validate_channels(collected)
 
     # === RESUMEN FINAL ===
-    print(f"\n{'='*50}")
-    print(f"📊 RESUMEN FINAL")
-    print(f"   Keywords completadas: {len(load_lines(COMPLETED_SEARCHES_FILE))}/90")
-    print(f"   Canales recolectados: {len(collected)}")
-    print(f"   Canales validados: {len(load_lines(CHECKED_IDS_FILE))}")
-    print(f"   Canales qualifying: {len(qualifying)}/{TARGET_CHANNELS}")
-    print(f"   Quota usada: {units_used}/{DAILY_QUOTA}")
+    logger.info(f"\n{'='*50}")
+    logger.info(f"📊 RESUMEN FINAL")
+    logger.info(f"   Keywords completadas: {len(load_lines(COMPLETED_SEARCHES_FILE))}/90")
+    logger.info(f"   Canales recolectados: {len(collected)}")
+    logger.info(f"   Canales validados: {len(load_lines(CHECKED_IDS_FILE))}")
+    logger.info(f"   Canales qualifying: {len(qualifying)}/{TARGET_CHANNELS}")
+    logger.info(f"   Quota usada: {units_used}/{DAILY_QUOTA}")
 
     if units_used >= DAILY_QUOTA:
-        print("\n⚠️ Cuota diaria alcanzada. Ejecuta de nuevo mañana para continuar.")
+        logger.warning("\n⚠️ Cuota diaria alcanzada. Ejecuta de nuevo mañana para continuar.")
 
     return qualifying
 
 
 if __name__ == "__main__":
+    setup_logging()
     run_scraper()

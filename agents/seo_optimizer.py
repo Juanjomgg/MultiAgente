@@ -1,9 +1,13 @@
 # agents/seo_optimizer.py
+import logging
+from logging_setup import setup_logging
 import json
 import os
 from llm_client import call_llm_json
+from prompt_utils import format_qc_feedback
+from config import DATA_DIR
+logger = logging.getLogger(__name__)
 
-DATA_DIR = "data"
 SEO_DIR = os.path.join(DATA_DIR, "seo")
 
 
@@ -102,20 +106,30 @@ def extract_keywords(video_data: dict) -> tuple[str, list[str], str]:
     return primary, secondaries, intent
 
 
-def run_seo_optimizer(video_data: dict, video_id: str) -> dict:
-    """Generates complete SEO optimization for a video."""
+def run_seo_optimizer(video_data: dict, video_id: str, feedback: list | None = None,
+                      script_data: dict | None = None) -> dict:
+    """Generates complete SEO optimization for a video.
+
+    Depends on the script: `script_data` is received in memory from the
+    orchestrator; if absent (standalone run), it falls back to the cached file.
+    If `feedback` (Quality Controller changes) is provided, this is a
+    re-generation that must address those specific fixes.
+    """
     os.makedirs(SEO_DIR, exist_ok=True)
 
-    print(f"🏷️ [SEO Optimizer] Optimizing {video_id}: {video_data.get('titulo', '')}")
+    logger.info(f"🏷️ [SEO Optimizer] Optimizing {video_id}: {video_data.get('titulo', '')}")
 
     primary_kw, secondary_kws, intent = extract_keywords(video_data)
 
-    # Load script if available for context
-    script_file = os.path.join(DATA_DIR, "scripts", f"{video_id}.json")
+    # Script context: prefer the in-memory data passed by the orchestrator;
+    # fall back to the cached file for standalone runs.
+    if script_data is None:
+        script_file = os.path.join(DATA_DIR, "scripts", f"{video_id}.json")
+        if os.path.exists(script_file):
+            with open(script_file, "r", encoding="utf-8") as f:
+                script_data = json.load(f)
     script_context = ""
-    if os.path.exists(script_file):
-        with open(script_file, "r", encoding="utf-8") as f:
-            script_data = json.load(f)
+    if script_data:
         script_context = f"\nSCRIPT HOOK: {str(script_data.get('hook', ''))[:300]}\nSCRIPT SAMPLE: {script_data.get('guion_completo', '')[:400]}..."
 
     user_prompt = f"""Generate complete SEO optimization for this YouTube video:
@@ -141,6 +155,10 @@ SPECIFIC INSTRUCTIONS:
 - Description line 1 must include "{primary_kw}" and work as a standalone search snippet
 - Include timestamps as placeholders: 0:00 Intro, 1:00 [First Section], etc."""
 
+    user_prompt += format_qc_feedback(feedback)
+    if feedback:
+        logger.info(f"   🔧 Regenerating with {len(feedback)} QC fix(es)")
+
     result = call_llm_json(
         agent_name="seo_optimizer",
         system_prompt=SYSTEM_PROMPT,
@@ -153,7 +171,7 @@ SPECIFIC INSTRUCTIONS:
         chars = len(t.get("texto", ""))
         t["caracteres"] = chars
         if chars > 60:
-            print(f"   ⚠️ Title too long ({chars} chars): {t['texto']}")
+            logger.warning(f"   ⚠️ Title too long ({chars} chars): {t['texto']}")
 
     # Guardrail: tags 500 char limit
     tags = result.get("tags", [])
@@ -166,7 +184,7 @@ SPECIFIC INSTRUCTIONS:
     thumb_text = result.get("texto_thumbnail", "")
     if len(thumb_text.split()) > 5:
         result["texto_thumbnail"] = " ".join(thumb_text.split()[:5])
-        print(f"   ⚠️ Thumbnail text trimmed to 5 words: {result['texto_thumbnail']}")
+        logger.warning(f"   ⚠️ Thumbnail text trimmed to 5 words: {result['texto_thumbnail']}")
 
     result["video_id"] = video_id
     result["intencion_busqueda"] = intent
@@ -176,13 +194,14 @@ SPECIFIC INSTRUCTIONS:
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
 
-    print(f"   ✅ [SEO Optimizer] Saved: {output_file}")
-    print(f"   🏷️  Title: {result.get('titulo_recomendado', 'N/A')}")
-    print(f"   🖼️  Thumbnail text: {result.get('texto_thumbnail', 'N/A')}")
+    logger.info(f"   ✅ [SEO Optimizer] Saved: {output_file}")
+    logger.info(f"   🏷️  Title: {result.get('titulo_recomendado', 'N/A')}")
+    logger.info(f"   🖼️  Thumbnail text: {result.get('texto_thumbnail', 'N/A')}")
     return result
 
 
 if __name__ == "__main__":
+    setup_logging()
     import sys
 
     CONTENT_CALENDAR_FILE = os.path.join(DATA_DIR, "content_calendar.json")
@@ -194,12 +213,12 @@ if __name__ == "__main__":
 
     videos = calendario.get("calendario", [])
     if video_num < 1 or video_num > len(videos):
-        print(f"❌ Video {video_num} doesn't exist. Range: 1-{len(videos)}")
+        logger.error(f"❌ Video {video_num} doesn't exist. Range: 1-{len(videos)}")
         sys.exit(1)
 
     video_data = videos[video_num - 1]
     video_id = f"video_{video_num:02d}"
 
-    print(f"🎯 Running SEO Optimizer for {video_id}: {video_data.get('titulo', '')}")
+    logger.info(f"🎯 Running SEO Optimizer for {video_id}: {video_data.get('titulo', '')}")
     resultado = run_seo_optimizer(video_data, video_id)
-    print(json.dumps(resultado, indent=2, ensure_ascii=False))
+    logger.info(json.dumps(resultado, indent=2, ensure_ascii=False))
