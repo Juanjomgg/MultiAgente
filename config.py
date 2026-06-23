@@ -25,10 +25,10 @@ AGENT_MODELS = {
     "niche_hunter":       "gemini-3.5-flash",
     "niche_validator":    "accounts/fireworks/models/deepseek-v4-pro",
     "content_strategist": "claude-sonnet-4-6",
-    "script_writer":      "claude-opus-4-7",
+    "script_writer":      "claude-opus-4-8",
     "seo_optimizer":      "gpt-5.4-mini",
     "thumbnail_conceptor":"gpt-5.4-mini",
-    "quality_controller": "claude-opus-4-6",
+    "quality_controller": "claude-opus-4-8",
 }
 
 # === GUARDRAILS: LÍMITES DE TOKENS POR AGENTE ===
